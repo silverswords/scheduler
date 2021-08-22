@@ -9,7 +9,13 @@ import (
 
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"go.etcd.io/etcd/clientv3"
+)
+
+var (
+	errNoEndpoints   = errors.New("can't not find endpoints in config file")
+	errWrongEndpoint = errors.New("wrong endpoint")
 )
 
 func init() {
@@ -37,8 +43,22 @@ var applyCmd = &cobra.Command{
 			return err
 		}
 
+		endpoints, ok := viper.Get("endpoints").([]interface{})
+		if !ok {
+			return errNoEndpoints
+		}
+
+		var eps []string
+		for _, endpoint := range endpoints {
+			endpoint, ok := endpoint.(string)
+			if !ok {
+				return errWrongEndpoint
+			}
+			eps = append(eps, endpoint)
+		}
+
 		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   []string{"localhost:60428"},
+			Endpoints:   eps,
 			DialTimeout: 5 * time.Second,
 		})
 		if err != nil {
@@ -46,12 +66,11 @@ var applyCmd = &cobra.Command{
 		}
 		defer client.Close()
 
-		response, err := client.Put(context.TODO(), "config/"+configPath, string(data))
-		if err != nil {
+		if _, err := client.Put(context.TODO(), "config/"+configPath, string(data)); err != nil {
 			return err
 		}
 
-		fmt.Println(response)
+		fmt.Println("apply success")
 		return nil
 	},
 }
