@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/silverswords/scheduler/pkg/discover"
+	"github.com/silverswords/scheduler/pkg/scheduler"
 )
 
 func init() {
@@ -20,9 +20,7 @@ var startCmd = &cobra.Command{
 		discoverManager := discover.NewManger()
 		go discoverManager.Run(context.Background())
 
-		for config := range discoverManager.SyncCh() {
-			fmt.Println(config)
-		}
+		scheduler.New().Run(discoverManager.SyncCh())
 		return nil
 	},
 }
