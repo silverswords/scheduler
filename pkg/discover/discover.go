@@ -14,7 +14,7 @@ type Manager struct {
 	mtx sync.RWMutex
 
 	targets map[string]config.Config
-	syncCh  chan []config.Config
+	syncCh  chan map[string]config.Config
 
 	updatert    time.Duration
 	triggerSend chan struct{}
@@ -22,7 +22,7 @@ type Manager struct {
 
 func NewManger() *Manager {
 	return &Manager{
-		syncCh:      make(chan []config.Config),
+		syncCh:      make(chan map[string]config.Config),
 		targets:     make(map[string]config.Config),
 		updatert:    5 * time.Second,
 		triggerSend: make(chan struct{}, 1),
@@ -95,18 +95,18 @@ func (m *Manager) sender(ctx context.Context) {
 	}
 }
 
-func (m *Manager) allConfig() []config.Config {
+func (m *Manager) allConfig() map[string]config.Config {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
 
-	var result []config.Config
-	for _, c := range m.targets {
-		result = append(result, c)
+	result := make(map[string]config.Config, len(m.targets))
+	for key, value := range m.targets {
+		result[key] = value
 	}
 
 	return result
 }
 
-func (m *Manager) SyncCh() <-chan []config.Config {
+func (m *Manager) SyncCh() <-chan map[string]config.Config {
 	return m.syncCh
 }
