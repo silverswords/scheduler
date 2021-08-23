@@ -78,7 +78,6 @@ func (s *Scheduler) reloader() {
 
 func (s *Scheduler) reload() {
 	s.mu.Lock()
-	tasks := make(map[string]task.Task)
 	for key, config := range s.configs {
 		if oldConfig, ok := s.oldConfigs[key]; ok {
 			if oldConfig == config {
@@ -86,10 +85,9 @@ func (s *Scheduler) reload() {
 			}
 		}
 		log.Printf("create task %s", key)
-		tasks[key] = config.New()
+		s.tasks[key] = config.New()
 	}
 
-	s.tasks = tasks
 	s.mu.Unlock()
 	s.reloadCh <- struct{}{}
 }
