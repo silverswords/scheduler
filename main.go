@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/silverswords/scheduler/client/cmd"
+	"github.com/silverswords/scheduler/cmd"
 )
 
 func main() {
