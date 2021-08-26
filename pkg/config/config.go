@@ -6,13 +6,16 @@ import (
 	"log"
 	"os/exec"
 
-	"github.com/silverswords/scheduler/pkg/task"
 	"gopkg.in/yaml.v2"
+
+	"github.com/silverswords/scheduler/pkg/schedule"
+	"github.com/silverswords/scheduler/pkg/task"
 )
 
 type Config interface {
-	New() task.Task
 	IsSame(*Config) (bool, error)
+	NewTask() (string, task.Task)
+	NewSchedule() (schedule.Schedule, error)
 }
 
 type config struct {
@@ -40,8 +43,8 @@ func Unmarshal(data []byte) (Config, error) {
 	return &c, nil
 }
 
-func (c *config) New() task.Task {
-	return task.TaskFunc(func(ctx context.Context) error {
+func (c *config) NewTask() (string, task.Task) {
+	return c.Name, task.TaskFunc(func(ctx context.Context) error {
 		for _, step := range c.Jobs.Steps {
 			cmd := exec.CommandContext(ctx, "bash", "-c", step.Run)
 			for k, v := range c.Jobs.Env {
@@ -49,13 +52,18 @@ func (c *config) New() task.Task {
 			}
 			output, err := cmd.Output()
 			if err != nil {
-				panic(err)
+				log.Println(err)
 			}
 			log.Println(string(output))
 		}
 
+		log.Println("task run finished")
 		return nil
 	})
+}
+
+func (c *config) NewSchedule() (schedule.Schedule, error) {
+	return schedule.NewCronSchedule(c.Name, c.Schedule.Cron)
 }
 
 func (c *config) IsSame(newConfig *Config) (bool, error) {
