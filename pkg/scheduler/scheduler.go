@@ -32,6 +32,10 @@ func New() *Scheduler {
 	}
 }
 
+// func (s *Scheduler) next() time.Time {
+
+// }
+
 func (s *Scheduler) Run(configs <-chan map[string]config.Config) {
 	s.isRunning = true
 	go s.reloader()
