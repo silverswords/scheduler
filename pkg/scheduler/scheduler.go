@@ -31,6 +31,7 @@ func New() *Scheduler {
 		reloadCh:      make(chan struct{}),
 	}
 }
+
 func (s *Scheduler) Run(configs <-chan map[string]config.Config) {
 	s.isRunning = true
 	go s.reloader()
@@ -80,7 +81,11 @@ func (s *Scheduler) reload() {
 	s.mu.Lock()
 	for key, config := range s.configs {
 		if oldConfig, ok := s.oldConfigs[key]; ok {
-			if oldConfig == config {
+			same, err := oldConfig.IsSame(&config)
+			if err != nil {
+				log.Printf("isSame error: %v", err)
+			}
+			if same {
 				continue
 			}
 		}

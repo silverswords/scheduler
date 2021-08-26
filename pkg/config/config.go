@@ -12,6 +12,7 @@ import (
 
 type Config interface {
 	New() task.Task
+	IsSame(*Config) (bool, error)
 }
 
 type config struct {
@@ -57,6 +58,20 @@ func (c *config) New() task.Task {
 	})
 }
 
+func (c *config) IsSame(newConfig *Config) (bool, error) {
+	old, err := yaml.Marshal(c)
+	if err != nil {
+		return false, err
+	}
+
+	new, err := yaml.Marshal(newConfig)
+	if err != nil {
+		return false, err
+	}
+
+	return string(new) == string(old), nil
+}
+
 func Validate(data []byte) error {
 	c := config{}
 	if err := yaml.Unmarshal(data, &c); err != nil {
@@ -64,28 +79,4 @@ func Validate(data []byte) error {
 	}
 
 	return nil
-}
-
-func (c *config) WithName(name string) *config {
-	c.Name = name
-	return c
-}
-
-func (c *config) WithSchedule(cron string) *config {
-	c.Schedule.Cron = cron
-	return c
-}
-
-func (c *config) WithEnv(env map[string]string) *config {
-	c.Jobs.Env = env
-	return c
-}
-
-func (c *config) WithSteps(steps ...Step) *config {
-	c.Jobs.Steps = make([]Step, 0)
-	for _, s := range steps {
-		c.Jobs.Steps = append(c.Jobs.Steps, s)
-	}
-
-	return c
 }
