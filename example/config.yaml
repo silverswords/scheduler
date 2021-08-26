@@ -1,9 +1,9 @@
 name: cron
 schedule:
-  cron: "0 * * * *"
+  cron: "*/1 * * * *"
 jobs:
   env:
-    HELLO: hello
+    HELLO: world
   steps:
     - name: Run
       run: echo $HELLO

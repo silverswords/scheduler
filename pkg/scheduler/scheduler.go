@@ -1,20 +1,24 @@
 package scheduler
 
 import (
+	"context"
 	"log"
+	"sort"
 	"sync"
 	"time"
 
 	"github.com/silverswords/scheduler/pkg/config"
+	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
 )
 
-type Scheduler struct {
+type Pool struct {
 	mu sync.Mutex
 
 	// once      sync.Once
-	stop  <-chan struct{}
-	tasks map[string]task.Task
+	stop      <-chan struct{}
+	tasks     map[string]task.Task
+	schedules []schedule.Schedule
 
 	isRunning bool
 
@@ -24,8 +28,9 @@ type Scheduler struct {
 	reloadCh      chan struct{}
 }
 
-func New() *Scheduler {
-	return &Scheduler{
+func New() *Pool {
+	return &Pool{
+		tasks:         make(map[string]task.Task),
 		stop:          make(<-chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		reloadCh:      make(chan struct{}),
@@ -36,55 +41,66 @@ func New() *Scheduler {
 
 // }
 
-func (s *Scheduler) Run(configs <-chan map[string]config.Config) {
-	s.isRunning = true
-	go s.reloader()
-
+func (p *Pool) Run(configs <-chan map[string]config.Config) {
+	p.isRunning = true
+	go p.reloader()
+	timer := p.caculateTimer()
 	for {
 		select {
+		case <-timer.C:
+			sche := p.schedules[0]
+			if task, ok := p.tasks[sche.Name()]; !ok {
+				log.Printf("no such task: %s\n", sche.Name())
+				continue
+			} else {
+				task.Do(context.TODO())
+			}
+			sche.Step()
+			timer = p.caculateTimer()
 		case newConfigs := <-configs:
-			s.SetConfig(newConfigs)
+			p.SetConfig(newConfigs)
 			select {
-			case s.triggerReload <- struct{}{}:
+			case p.triggerReload <- struct{}{}:
 			default:
 			}
-		case <-s.reloadCh:
-			continue
-		case <-s.stop:
+		case <-p.reloadCh:
+			timer = p.caculateTimer()
+			log.Println("recaculate timer, next run after", time.Until(p.schedules[0].Next()))
+		case <-p.stop:
 			return
 		}
 
 	}
 }
 
-func (s *Scheduler) SetConfig(configs map[string]config.Config) {
-	s.mu.Lock()
-	s.oldConfigs, s.configs = s.configs, configs
-	s.mu.Unlock()
+func (p *Pool) SetConfig(configs map[string]config.Config) {
+	p.mu.Lock()
+	p.oldConfigs, p.configs = p.configs, configs
+	p.mu.Unlock()
 }
 
-func (s *Scheduler) reloader() {
+func (p *Pool) reloader() {
 	ticker := time.NewTicker(5 * time.Second)
 	select {
 	case <-ticker.C:
 		select {
-		case <-s.triggerReload:
-			s.reload()
-		case <-s.stop:
+		case <-p.triggerReload:
+			p.reload()
+		case <-p.stop:
 			ticker.Stop()
 			return
 		}
 
-	case <-s.stop:
+	case <-p.stop:
 		ticker.Stop()
 		return
 	}
 }
 
-func (s *Scheduler) reload() {
-	s.mu.Lock()
-	for key, config := range s.configs {
-		if oldConfig, ok := s.oldConfigs[key]; ok {
+func (p *Pool) reload() {
+	p.mu.Lock()
+	for key, config := range p.configs {
+		if oldConfig, ok := p.oldConfigs[key]; ok {
 			same, err := oldConfig.IsSame(&config)
 			if err != nil {
 				log.Printf("isSame error: %v", err)
@@ -94,9 +110,26 @@ func (s *Scheduler) reload() {
 			}
 		}
 		log.Printf("create task %s", key)
-		s.tasks[key] = config.New()
+		name, task := config.NewTask()
+		p.tasks[name] = task
+		schedule, err := config.NewSchedule()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		p.schedules = append(p.schedules, schedule)
 	}
 
-	s.mu.Unlock()
-	s.reloadCh <- struct{}{}
+	p.mu.Unlock()
+	p.reloadCh <- struct{}{}
+}
+
+func (p *Pool) caculateTimer() *time.Timer {
+	sort.Sort(schedule.ByTime(p.schedules))
+
+	if len(p.schedules) == 0 || p.schedules[0].Next().IsZero() {
+		return time.NewTimer(100000 * time.Hour)
+	} else {
+		return time.NewTimer(time.Until(p.schedules[0].Next()))
+	}
 }
