@@ -63,3 +63,24 @@ func (s ByTime) Less(i, j int) bool {
 	}
 	return s[i].Next().Before(s[j].Next())
 }
+
+type onceSchedule struct {
+	name string
+	next time.Time
+}
+
+func NewOnceSchedule(name string) Schedule {
+	return &onceSchedule{name: name, next: time.Now()}
+}
+
+func (o *onceSchedule) Name() string {
+	return o.name
+}
+
+func (o *onceSchedule) Next() time.Time {
+	return o.next
+}
+
+func (o *onceSchedule) Step() {
+	o.next = time.Time{}
+}

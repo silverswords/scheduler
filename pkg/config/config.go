@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/silverswords/scheduler/pkg/message"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
 )
@@ -18,6 +19,13 @@ var (
 	errEmptyName     = errors.New("no name")
 	errEmptySchedule = errors.New("no schedule")
 	errEmptyJobs     = errors.New("no jobs")
+)
+
+type scheduleType int
+
+const (
+	once scheduleType = iota
+	cron
 )
 
 type Config interface {
@@ -33,6 +41,7 @@ type config struct {
 }
 type Schedule struct {
 	Cron string
+	Type string
 }
 
 func (s Schedule) IsEmapty() bool {
@@ -65,6 +74,9 @@ func Unmarshal(data []byte) (Config, error) {
 
 func (c *config) NewTask() (string, task.Task) {
 	return c.Name, task.TaskFunc(func(ctx context.Context) error {
+		var msg string
+		count := 1
+
 		for _, step := range c.Jobs.Steps {
 			cmd := exec.CommandContext(ctx, "bash", "-c", step.Run)
 			for k, v := range c.Jobs.Env {
@@ -74,16 +86,43 @@ func (c *config) NewTask() (string, task.Task) {
 			if err != nil {
 				log.Println(err)
 			}
+
 			log.Println(string(output))
+			msg += fmt.Sprintf("step%d run result: %s\n", count, string(output))
+			count++
 		}
 
 		log.Println("task run finished")
+		summary := fmt.Sprintf("task %s run finished", c.Name)
+		err := message.Push(summary, msg)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 }
 
 func (c *config) NewSchedule() (schedule.Schedule, error) {
-	return schedule.NewCronSchedule(c.Name, c.Schedule.Cron)
+	switch c.Type() {
+	case once:
+		return schedule.NewOnceSchedule(c.Name), nil
+	case cron:
+		return schedule.NewCronSchedule(c.Name, c.Schedule.Cron)
+	}
+
+	return nil, errors.New("error schedule type")
+}
+
+func (c *config) Type() scheduleType {
+	switch c.Schedule.Type {
+	case "once":
+		return once
+	case "cron":
+		return cron
+	}
+
+	return -1
 }
 
 func (c *config) IsSame(newConfig *Config) (bool, error) {

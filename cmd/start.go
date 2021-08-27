@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/silverswords/scheduler/pkg/discover"
-	"github.com/silverswords/scheduler/pkg/scheduler"
+	scheduler "github.com/silverswords/scheduler/pkg/pool"
 )
 
 func init() {

@@ -1,4 +1,4 @@
-package scheduler
+package pool
 
 import (
 	"context"
@@ -53,7 +53,10 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 				log.Printf("no such task: %s\n", sche.Name())
 				continue
 			} else {
-				task.Do(context.TODO())
+				err := task.Do(context.TODO())
+				if err != nil {
+					log.Println("task execute failed, err = ", err)
+				}
 			}
 			sche.Step()
 			timer = p.caculateTimer()
