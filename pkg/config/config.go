@@ -75,7 +75,6 @@ func Unmarshal(data []byte) (Config, error) {
 func (c *config) NewTask() (string, task.Task) {
 	return c.Name, task.TaskFunc(func(ctx context.Context) error {
 		var msg string
-		count := 1
 
 		for _, step := range c.Jobs.Steps {
 			cmd := exec.CommandContext(ctx, "bash", "-c", step.Run)
@@ -88,8 +87,7 @@ func (c *config) NewTask() (string, task.Task) {
 			}
 
 			log.Println(string(output))
-			msg += fmt.Sprintf("step%d run result: %s\n", count, string(output))
-			count++
+			msg += fmt.Sprintf("step %s run result: %s\n", step.Name, string(output))
 		}
 
 		log.Println("task run finished")
