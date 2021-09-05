@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -37,10 +38,6 @@ func New() *Pool {
 	}
 }
 
-// func (s *Scheduler) next() time.Time {
-
-// }
-
 func (p *Pool) Run(configs <-chan map[string]config.Config) {
 	p.isRunning = true
 	go p.reloader()
@@ -55,13 +52,15 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 			} else {
 				err := task.Do(context.TODO())
 				if err != nil {
-					log.Println("task execute failed, err = ", err)
+					log.Println("task execute failed, err: ", err)
 				}
+				log.Printf("task %s finished\n", sche.Name())
 			}
 			sche.Step()
 			timer = p.caculateTimer()
 		case newConfigs := <-configs:
 			p.SetConfig(newConfigs)
+			fmt.Println("come")
 			select {
 			case p.triggerReload <- struct{}{}:
 			default:
@@ -88,6 +87,7 @@ func (p *Pool) reloader() {
 	case <-ticker.C:
 		select {
 		case <-p.triggerReload:
+			fmt.Println("reload")
 			p.reload()
 		case <-p.stop:
 			ticker.Stop()

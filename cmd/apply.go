@@ -7,14 +7,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/silverswords/scheduler/pkg/config"
+	taskConfig "github.com/silverswords/scheduler/pkg/config"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.etcd.io/etcd/clientv3"
 )
 
 var (
-	errNoEndpoints   = errors.New("can't not find endpoints in config file")
+	errNoEndpoints   = errors.New("can't find endpoints in config file")
 	errWrongEndpoint = errors.New("wrong endpoint")
 )
 
@@ -39,24 +39,24 @@ var applyCmd = &cobra.Command{
 			return err
 		}
 
-		if err := config.Validate(data); err != nil {
+		if err := taskConfig.Validate(data); err != nil {
 			return err
 		}
 
-		endpoints, ok := viper.Get("endpoints").([]interface{})
+		endpoints, ok := viper.Get("etcd.endpoints").([]interface{})
 		if !ok {
 			return errNoEndpoints
 		}
 
-		var eps []string
+		eps := make([]string, 0)
 		for _, endpoint := range endpoints {
 			endpoint, ok := endpoint.(string)
 			if !ok {
 				return errWrongEndpoint
 			}
+
 			eps = append(eps, endpoint)
 		}
-
 		client, err := clientv3.New(clientv3.Config{
 			Endpoints:   eps,
 			DialTimeout: 5 * time.Second,

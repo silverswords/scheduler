@@ -7,10 +7,10 @@ import (
 	"log"
 	"os/exec"
 	"reflect"
+	"strings"
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/silverswords/scheduler/pkg/message"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
 )
@@ -38,6 +38,7 @@ type config struct {
 	Name     string
 	Schedule Schedule
 	Jobs     Jobs
+	Upload   string
 }
 type Schedule struct {
 	Cron string
@@ -77,25 +78,29 @@ func (c *config) NewTask() (string, task.Task) {
 		var msg string
 
 		for _, step := range c.Jobs.Steps {
+			if c.Upload != "" {
+				step.Run = strings.Trim(step.Run, "./")
+				step.Run = strings.ReplaceAll(step.Run, c.Upload, "./files/"+c.Upload)
+			}
 			cmd := exec.CommandContext(ctx, "bash", "-c", step.Run)
 			for k, v := range c.Jobs.Env {
 				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 			}
 			output, err := cmd.Output()
 			if err != nil {
-				log.Println(err)
+				log.Printf("new task failed: %v", err)
 			}
 
-			log.Println(string(output))
+			log.Print(string(output))
 			msg += fmt.Sprintf("step %s run result: %s\n", step.Name, string(output))
 		}
 
 		log.Println("task run finished")
-		summary := fmt.Sprintf("task %s run finished", c.Name)
-		err := message.Push(summary, msg)
-		if err != nil {
-			return err
-		}
+		// summary := fmt.Sprintf("task %s run finished", c.Name)
+		// err := message.Push(summary, msg)
+		// if err != nil {
+		// 	return err
+		// }
 
 		return nil
 	})

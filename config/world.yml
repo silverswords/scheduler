@@ -1,0 +1,8 @@
+name: world
+schedule:
+  type: cron
+  cron: "*/1 * * * *"
+jobs:
+  steps:
+    - name: Run
+      run: /Users/sakura/workspace/work_now/spider/world/world

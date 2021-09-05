@@ -1,0 +1,8 @@
+name: hello
+schedule:
+  type: once
+jobs:
+  steps:
+    - name: Run
+      run: ./hello
+upload: hello

@@ -7,6 +7,7 @@ import (
 
 	"github.com/silverswords/scheduler/pkg/discover"
 	scheduler "github.com/silverswords/scheduler/pkg/pool"
+	"github.com/silverswords/scheduler/pkg/upload"
 )
 
 func init() {
@@ -19,6 +20,7 @@ var startCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		discoverManager := discover.NewManger()
 		go discoverManager.Run(context.Background())
+		go upload.ListenAndServe()
 
 		scheduler.New().Run(discoverManager.SyncCh())
 		return nil

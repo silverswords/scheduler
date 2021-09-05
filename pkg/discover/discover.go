@@ -68,6 +68,7 @@ func (m *Manager) Run(ctx context.Context) {
 		}
 	}
 }
+
 func (m *Manager) sender(ctx context.Context) {
 	ticker := time.NewTicker(m.updatert)
 	defer ticker.Stop()
