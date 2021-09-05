@@ -56,14 +56,15 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 				}
 				log.Printf("task %s finished\n", sche.Name())
 			}
+			p.schedules = p.schedules[1:]
 			sche.Step()
 			timer = p.caculateTimer()
 		case newConfigs := <-configs:
 			p.SetConfig(newConfigs)
-			fmt.Println("come")
 			select {
 			case p.triggerReload <- struct{}{}:
 			default:
+				fmt.Println("default")
 			}
 		case <-p.reloadCh:
 			timer = p.caculateTimer()
@@ -83,26 +84,34 @@ func (p *Pool) SetConfig(configs map[string]config.Config) {
 
 func (p *Pool) reloader() {
 	ticker := time.NewTicker(5 * time.Second)
-	select {
-	case <-ticker.C:
+	for {
 		select {
-		case <-p.triggerReload:
-			fmt.Println("reload")
-			p.reload()
+		case <-ticker.C:
+			select {
+			case <-p.triggerReload:
+				fmt.Println("reload")
+				p.reload()
+			case <-p.stop:
+				ticker.Stop()
+				return
+			}
+
 		case <-p.stop:
 			ticker.Stop()
 			return
 		}
-
-	case <-p.stop:
-		ticker.Stop()
-		return
 	}
 }
 
 func (p *Pool) reload() {
 	p.mu.Lock()
 	for key, config := range p.configs {
+		schedule, err := config.NewSchedule()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		p.schedules = append(p.schedules, schedule)
 		if oldConfig, ok := p.oldConfigs[key]; ok {
 			same, err := oldConfig.IsSame(&config)
 			if err != nil {
@@ -115,12 +124,6 @@ func (p *Pool) reload() {
 		log.Printf("create task %s", key)
 		name, task := config.NewTask()
 		p.tasks[name] = task
-		schedule, err := config.NewSchedule()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		p.schedules = append(p.schedules, schedule)
 	}
 
 	p.mu.Unlock()
