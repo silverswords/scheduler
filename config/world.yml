@@ -3,6 +3,8 @@ schedule:
   type: cron
   cron: "*/1 * * * *"
 jobs:
+  env:
+    WORLD: world
   steps:
-    - name: Run
-      run: /Users/sakura/workspace/work_now/spider/world/world
+    - name: run
+      run: echo WORLD

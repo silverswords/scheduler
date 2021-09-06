@@ -57,6 +57,7 @@ func (m *Manager) Run(ctx context.Context) {
 				if err != nil {
 					log.Printf("Config can't be unmarshal: %s\n", err)
 				}
+				c.SetTag("new")
 				m.targets[string(event.Kv.Key)] = c
 			}
 			m.mtx.Unlock()

@@ -21,17 +21,12 @@ var (
 	errEmptyJobs     = errors.New("no jobs")
 )
 
-type scheduleType int
-
-const (
-	once scheduleType = iota
-	cron
-)
-
 type Config interface {
 	IsSame(*Config) (bool, error)
 	NewTask() (string, task.Task)
 	NewSchedule() (schedule.Schedule, error)
+	SetTag(string)
+	GetTag() string
 }
 
 type config struct {
@@ -39,6 +34,9 @@ type config struct {
 	Schedule Schedule
 	Jobs     Jobs
 	Upload   string
+	// in order to reload distinct once type task
+	// is a enum type: {"new", "old"}
+	Tag string
 }
 type Schedule struct {
 	Cron string
@@ -73,6 +71,14 @@ func Unmarshal(data []byte) (Config, error) {
 	return &c, nil
 }
 
+func (c *config) SetTag(tag string) {
+	c.Tag = tag
+}
+
+func (c *config) GetTag() string {
+	return c.Tag
+}
+
 func (c *config) NewTask() (string, task.Task) {
 	return c.Name, task.TaskFunc(func(ctx context.Context) error {
 		var msg string
@@ -84,6 +90,7 @@ func (c *config) NewTask() (string, task.Task) {
 			}
 			cmd := exec.CommandContext(ctx, "bash", "-c", step.Run)
 			for k, v := range c.Jobs.Env {
+				fmt.Println(k, v)
 				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 			}
 			output, err := cmd.Output()
@@ -107,25 +114,14 @@ func (c *config) NewTask() (string, task.Task) {
 }
 
 func (c *config) NewSchedule() (schedule.Schedule, error) {
-	switch c.Type() {
-	case once:
-		return schedule.NewOnceSchedule(c.Name), nil
-	case cron:
-		return schedule.NewCronSchedule(c.Name, c.Schedule.Cron)
+	switch c.Schedule.Type {
+	case "once":
+		return schedule.NewOnceSchedule(c.Name, "once"), nil
+	case "cron":
+		return schedule.NewCronSchedule(c.Name, c.Schedule.Cron, "cron")
 	}
 
 	return nil, errors.New("error schedule type")
-}
-
-func (c *config) Type() scheduleType {
-	switch c.Schedule.Type {
-	case "once":
-		return once
-	case "cron":
-		return cron
-	}
-
-	return -1
 }
 
 func (c *config) IsSame(newConfig *Config) (bool, error) {

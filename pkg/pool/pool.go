@@ -56,9 +56,9 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 				}
 				log.Printf("task %s finished\n", sche.Name())
 			}
-			p.schedules = p.schedules[1:]
 			sche.Step()
 			timer = p.caculateTimer()
+			log.Println("recaculate timer, next run after 61", time.Until(p.schedules[0].Next()))
 		case newConfigs := <-configs:
 			p.SetConfig(newConfigs)
 			select {
@@ -68,7 +68,7 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 			}
 		case <-p.reloadCh:
 			timer = p.caculateTimer()
-			log.Println("recaculate timer, next run after", time.Until(p.schedules[0].Next()))
+			log.Println("recaculate timer, next run after 71", time.Until(p.schedules[0].Next()))
 		case <-p.stop:
 			return
 		}
@@ -89,7 +89,6 @@ func (p *Pool) reloader() {
 		case <-ticker.C:
 			select {
 			case <-p.triggerReload:
-				fmt.Println("reload")
 				p.reload()
 			case <-p.stop:
 				ticker.Stop()
@@ -106,24 +105,58 @@ func (p *Pool) reloader() {
 func (p *Pool) reload() {
 	p.mu.Lock()
 	for key, config := range p.configs {
-		schedule, err := config.NewSchedule()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		p.schedules = append(p.schedules, schedule)
 		if oldConfig, ok := p.oldConfigs[key]; ok {
 			same, err := oldConfig.IsSame(&config)
 			if err != nil {
 				log.Printf("isSame error: %v", err)
 			}
 			if same {
+				if config.GetTag() == "new" {
+					schedule, err := config.NewSchedule()
+					if err != nil {
+						log.Println(err)
+						continue
+					}
+					if schedule.Kind() == "once" {
+						for i, s := range p.schedules {
+							if s.Name() == schedule.Name() {
+								p.schedules[i] = schedule
+							}
+						}
+					}
+				}
+				config.SetTag("old")
+				continue
+			} else {
+				config.SetTag("old")
+				log.Printf("create task %s", key)
+				name, task := config.NewTask()
+				p.tasks[name] = task
+				log.Printf("create schedule %s", name)
+				schedule, err := config.NewSchedule()
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				for i, s := range p.schedules {
+					if s.Name() == schedule.Name() {
+						p.schedules[i] = schedule
+					}
+				}
 				continue
 			}
 		}
+		config.SetTag("old")
 		log.Printf("create task %s", key)
 		name, task := config.NewTask()
 		p.tasks[name] = task
+		log.Printf("create schedule %s", name)
+		schedule, err := config.NewSchedule()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		p.schedules = append(p.schedules, schedule)
 	}
 
 	p.mu.Unlock()

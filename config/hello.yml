@@ -1,8 +1,8 @@
 name: hello
 schedule:
   type: once
+upload: hello
 jobs:
   steps:
     - name: Run
       run: ./hello
-upload: hello

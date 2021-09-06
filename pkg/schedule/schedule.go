@@ -10,6 +10,7 @@ type Schedule interface {
 	Name() string
 	Next() time.Time
 	Step()
+	Kind() string
 }
 
 var standardParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
@@ -19,9 +20,10 @@ type cronSchedule struct {
 	s    cron.Schedule
 	next time.Time
 	prev time.Time
+	kind string
 }
 
-func NewCronSchedule(name string, cronStr string) (Schedule, error) {
+func NewCronSchedule(name, cronStr, kind string) (Schedule, error) {
 	s, err := standardParser.Parse(cronStr)
 	if err != nil {
 		return nil, err
@@ -30,6 +32,7 @@ func NewCronSchedule(name string, cronStr string) (Schedule, error) {
 	return &cronSchedule{
 		name: name,
 		s:    s,
+		kind: kind,
 	}, nil
 }
 
@@ -50,6 +53,10 @@ func (s *cronSchedule) Step() {
 	s.next = s.s.Next(s.prev)
 }
 
+func (s *cronSchedule) Kind() string {
+	return s.kind
+}
+
 type ByTime []Schedule
 
 func (s ByTime) Len() int      { return len(s) }
@@ -67,10 +74,11 @@ func (s ByTime) Less(i, j int) bool {
 type onceSchedule struct {
 	name string
 	next time.Time
+	kind string
 }
 
-func NewOnceSchedule(name string) Schedule {
-	return &onceSchedule{name: name, next: time.Now()}
+func NewOnceSchedule(name, kind string) Schedule {
+	return &onceSchedule{name: name, next: time.Now(), kind: kind}
 }
 
 func (o *onceSchedule) Name() string {
@@ -83,4 +91,8 @@ func (o *onceSchedule) Next() time.Time {
 
 func (o *onceSchedule) Step() {
 	o.next = time.Time{}
+}
+
+func (s *onceSchedule) Kind() string {
+	return s.kind
 }
