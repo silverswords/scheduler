@@ -1,0 +1,10 @@
+name: shell_task_once
+schedule:
+  type: once
+jobs:
+  env:
+    TASKTYPE: shell
+    SCHEDULETYPE: once
+  steps:
+    - name: run
+      run: echo task:$TASKTYPE, schedule:$SCHEDULETYPE

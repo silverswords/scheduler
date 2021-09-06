@@ -1,8 +1,8 @@
-name: hello
+name: upload_task_once
 schedule:
   type: once
 upload: hello
 jobs:
   steps:
-    - name: Run
+    - name: run
       run: ./hello

@@ -62,10 +62,10 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 				continue
 			}
 			if p.schedules[0].Kind() == "once" {
-				log.Println("recaculate timer, next run right now")
+				log.Printf("recaculate timer, next task is %s, next run right now\n", p.schedules[0].Name())
 				continue
 			}
-			log.Println("recaculate timer, next run after", time.Until(p.schedules[0].Next()))
+			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
 		case newConfigs := <-configs:
 			p.SetConfig(newConfigs)
 			select {
@@ -76,10 +76,10 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 		case <-p.reloadCh:
 			timer = p.caculateTimer()
 			if p.schedules[0].Kind() == "once" {
-				log.Println("recaculate timer, next run right now")
+				log.Printf("recaculate timer, next task is %s, next run right now\n", p.schedules[0].Name())
 				continue
 			}
-			log.Println("recaculate timer, next run after", time.Until(p.schedules[0].Next()))
+			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
 		case <-p.stop:
 			return
 		}

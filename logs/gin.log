@@ -6,3 +6,5 @@
 
 [GIN-debug] POST   /upload                   --> github.com/silverswords/scheduler/pkg/upload.(*Manager).upload-fm (3 handlers)
 [GIN-debug] Listening and serving HTTP on :8080
+[GIN] 2021/09/06 - 14:05:37 |[90;43m 404 [0m|       1.066µs |   192.168.0.251 |[97;44m GET     [0m "/"
+[GIN] 2021/09/06 - 14:05:42 |[90;43m 404 [0m|       1.343µs |   192.168.0.251 |[97;44m GET     [0m "/"

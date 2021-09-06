@@ -1,10 +1,9 @@
-name: world
+name: upload_task_cron
 schedule:
   type: cron
   cron: "*/1 * * * *"
+upload: hello
 jobs:
-  env:
-    WORLD: world
   steps:
     - name: run
-      run: echo WORLD
+      run: ./hello
