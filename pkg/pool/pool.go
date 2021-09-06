@@ -54,11 +54,18 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 				if err != nil {
 					log.Println("task execute failed, err: ", err)
 				}
-				log.Printf("task %s finished\n", sche.Name())
 			}
 			sche.Step()
 			timer = p.caculateTimer()
-			log.Println("recaculate timer, next run after 61", time.Until(p.schedules[0].Next()))
+			if time.Until(p.schedules[0].Next()).Hours() < -10000 {
+				log.Println("all task have been completed")
+				continue
+			}
+			if p.schedules[0].Kind() == "once" {
+				log.Println("recaculate timer, next run right now")
+				continue
+			}
+			log.Println("recaculate timer, next run after", time.Until(p.schedules[0].Next()))
 		case newConfigs := <-configs:
 			p.SetConfig(newConfigs)
 			select {
@@ -68,7 +75,11 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 			}
 		case <-p.reloadCh:
 			timer = p.caculateTimer()
-			log.Println("recaculate timer, next run after 71", time.Until(p.schedules[0].Next()))
+			if p.schedules[0].Kind() == "once" {
+				log.Println("recaculate timer, next run right now")
+				continue
+			}
+			log.Println("recaculate timer, next run after", time.Until(p.schedules[0].Next()))
 		case <-p.stop:
 			return
 		}
@@ -129,10 +140,9 @@ func (p *Pool) reload() {
 				continue
 			} else {
 				config.SetTag("old")
-				log.Printf("create task %s", key)
 				name, task := config.NewTask()
+				log.Printf("task %s has been created", name)
 				p.tasks[name] = task
-				log.Printf("create schedule %s", name)
 				schedule, err := config.NewSchedule()
 				if err != nil {
 					log.Println(err)
@@ -147,10 +157,9 @@ func (p *Pool) reload() {
 			}
 		}
 		config.SetTag("old")
-		log.Printf("create task %s", key)
 		name, task := config.NewTask()
+		log.Printf("task %s has been created", name)
 		p.tasks[name] = task
-		log.Printf("create schedule %s", name)
 		schedule, err := config.NewSchedule()
 		if err != nil {
 			log.Println(err)
@@ -167,7 +176,7 @@ func (p *Pool) caculateTimer() *time.Timer {
 	sort.Sort(schedule.ByTime(p.schedules))
 
 	if len(p.schedules) == 0 || p.schedules[0].Next().IsZero() {
-		return time.NewTimer(100000 * time.Hour)
+		return time.NewTimer(1000000 * time.Hour)
 	} else {
 		return time.NewTimer(time.Until(p.schedules[0].Next()))
 	}

@@ -82,7 +82,7 @@ func (c *config) GetTag() string {
 func (c *config) NewTask() (string, task.Task) {
 	return c.Name, task.TaskFunc(func(ctx context.Context) error {
 		var msg string
-
+		log.Println("task run start")
 		for _, step := range c.Jobs.Steps {
 			if c.Upload != "" {
 				step.Run = strings.Trim(step.Run, "./")
@@ -90,7 +90,6 @@ func (c *config) NewTask() (string, task.Task) {
 			}
 			cmd := exec.CommandContext(ctx, "bash", "-c", step.Run)
 			for k, v := range c.Jobs.Env {
-				fmt.Println(k, v)
 				cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 			}
 			output, err := cmd.Output()
