@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	appToken = "AT_lXli0tFj07JDafUASdG48eZlmy2EHsbS"
-	topicID  = 2943
+	appToken = "AT_XELi4GQ3XFvty9zWGAEZemJ5IFRwB0Nc"
+	topicID  = 3048
 )
 
 func Push(summary, content string) error {

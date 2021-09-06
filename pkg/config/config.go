@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/silverswords/scheduler/pkg/message"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
 )
@@ -82,7 +83,7 @@ func (c *config) GetTag() string {
 func (c *config) NewTask() (string, task.Task) {
 	return c.Name, task.TaskFunc(func(ctx context.Context) error {
 		var msg string
-		log.Println("task run start")
+		log.Printf("task %s run start\n", c.Name)
 		for _, step := range c.Jobs.Steps {
 			if c.Upload != "" {
 				step.Run = strings.Trim(step.Run, "./")
@@ -101,12 +102,12 @@ func (c *config) NewTask() (string, task.Task) {
 			msg += fmt.Sprintf("step %s run result: %s\n", step.Name, string(output))
 		}
 
-		log.Println("task run finished")
-		// summary := fmt.Sprintf("task %s run finished", c.Name)
-		// err := message.Push(summary, msg)
-		// if err != nil {
-		// 	return err
-		// }
+		log.Printf("task %s run finished\n", c.Name)
+		summary := fmt.Sprintf("task %s run finished", c.Name)
+		err := message.Push(summary, msg)
+		if err != nil {
+			return err
+		}
 
 		return nil
 	})
