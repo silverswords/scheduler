@@ -109,6 +109,11 @@ func (c *config) NewTask() (string, task.Task) {
 			return err
 		}
 
+		err = message.Send(summary, msg)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	})
 }
