@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"time"
 
@@ -66,11 +65,10 @@ var applyCmd = &cobra.Command{
 		}
 		defer client.Close()
 
-		if _, err := client.Put(context.TODO(), "config/"+configPath, string(data)); err != nil {
+		if _, err := client.Put(context.TODO(), "config update"+configPath, string(data)); err != nil {
 			return err
 		}
 
-		fmt.Println("apply success")
 		return nil
 	},
 }

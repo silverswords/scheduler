@@ -22,7 +22,7 @@ var startCmd = &cobra.Command{
 		go discoverManager.Run(context.Background())
 		go upload.ListenAndServe()
 
-		scheduler.New().Run(discoverManager.SyncCh())
+		scheduler.New().Run(discoverManager.SyncCh(), discoverManager.RemoveCh())
 		return nil
 	},
 }

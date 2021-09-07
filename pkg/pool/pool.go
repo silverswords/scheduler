@@ -15,6 +15,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+var ()
+
 type Pool struct {
 	mu sync.Mutex
 
@@ -28,7 +30,7 @@ type Pool struct {
 	oldConfigs    map[string]config.Config
 	configs       map[string]config.Config
 	triggerReload chan struct{}
-	reloadCh      chan struct{}
+	syncCh        chan struct{}
 }
 
 func New() *Pool {
@@ -36,14 +38,17 @@ func New() *Pool {
 		tasks:         make(map[string]task.Task),
 		stop:          make(<-chan struct{}),
 		triggerReload: make(chan struct{}, 1),
-		reloadCh:      make(chan struct{}),
+		syncCh:        make(chan struct{}),
 	}
 }
 
-func (p *Pool) Run(configs <-chan map[string]config.Config) {
+func (p *Pool) Run(configs <-chan map[string]config.Config, removeTaskCh <-chan []config.Config) {
 	p.isRunning = true
-	go p.reloader()
+	go p.reload()
+	go p.reloader(configs)
+
 	timer := p.caculateTimer()
+
 	for {
 		select {
 		case <-timer.C:
@@ -107,24 +112,49 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 				continue
 			}
 			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
-		case newConfigs := <-configs:
-			p.SetConfig(newConfigs)
-			select {
-			case p.triggerReload <- struct{}{}:
-			default:
-				fmt.Println("default")
-			}
-		case <-p.reloadCh:
+
+		case <-p.syncCh:
 			timer = p.caculateTimer()
 			if p.schedules[0].Kind() == "once" {
 				log.Printf("recaculate timer, next task is %s, next run right now\n", p.schedules[0].Name())
 				continue
 			}
 			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
+
+		case configs := <-removeTaskCh:
+			for _, c := range configs {
+				name, _ := c.NewTask()
+				for i, schedule := range p.schedules {
+					if name == schedule.Name() {
+						p.schedules[i], p.schedules[len(p.schedules)-1] = p.schedules[len(p.schedules)-1], p.schedules[i]
+						p.schedules = p.schedules[:len(p.schedules)-1]
+					}
+				}
+
+				delete(p.tasks, name)
+			}
+
+			timer = p.caculateTimer()
+
 		case <-p.stop:
 			return
 		}
+	}
+}
 
+func (p *Pool) reloader(configs <-chan map[string]config.Config) {
+	for {
+		select {
+		case newConfigs := <-configs:
+			p.SetConfig(newConfigs)
+			select {
+			case p.triggerReload <- struct{}{}:
+			default:
+			}
+
+		case <-p.stop:
+			return
+		}
 	}
 }
 
@@ -134,14 +164,15 @@ func (p *Pool) SetConfig(configs map[string]config.Config) {
 	p.mu.Unlock()
 }
 
-func (p *Pool) reloader() {
+func (p *Pool) reload() {
 	ticker := time.NewTicker(5 * time.Second)
+
 	for {
 		select {
 		case <-ticker.C:
 			select {
 			case <-p.triggerReload:
-				p.reload()
+				p.sync()
 			case <-p.stop:
 				ticker.Stop()
 				return
@@ -154,7 +185,7 @@ func (p *Pool) reloader() {
 	}
 }
 
-func (p *Pool) reload() {
+func (p *Pool) sync() {
 	p.mu.Lock()
 	for key, config := range p.configs {
 		if oldConfig, ok := p.oldConfigs[key]; ok {
@@ -210,7 +241,7 @@ func (p *Pool) reload() {
 	}
 
 	p.mu.Unlock()
-	p.reloadCh <- struct{}{}
+	p.syncCh <- struct{}{}
 }
 
 func (p *Pool) caculateTimer() *time.Timer {

@@ -15,7 +15,7 @@ var pusherCmd = &cobra.Command{
 	Use:   "pusher",
 	Short: "get message pusher subscribe address",
 	Args: func(cmd *cobra.Command, args []string) error {
-		if len(args) < 1 {
+		if len(args) != 1 {
 			return errors.New("requires pusher way")
 		}
 

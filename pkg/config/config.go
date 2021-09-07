@@ -102,9 +102,9 @@ func (c *config) NewTask() (string, task.Task) {
 			}
 
 			log.Print(string(output))
-			msg += fmt.Sprintf("step %s run result: %s\n", step.Name, string(output))
+			msg += fmt.Sprintf("step [%s] run result: %s\n", step.Name, string(output))
 		}
-		msg += fmt.Sprintf("task %s run finished\n", c.Name)
+		msg += fmt.Sprintf("task [%s] run finished\n", c.Name)
 		data.Data = msg
 		data.Err = nil
 

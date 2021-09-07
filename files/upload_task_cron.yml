@@ -1,0 +1,9 @@
+name: upload_task_cron
+schedule:
+  type: cron
+  cron: "*/1 * * * *"
+upload: hello
+jobs:
+  steps:
+    - name: run
+      run: ./hello

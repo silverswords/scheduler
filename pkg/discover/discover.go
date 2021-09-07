@@ -16,16 +16,18 @@ type Manager struct {
 	targets map[string]config.Config
 	syncCh  chan map[string]config.Config
 
-	updatert    time.Duration
-	triggerSend chan struct{}
+	updatert     time.Duration
+	triggerSend  chan struct{}
+	removeTaskCh chan []config.Config
 }
 
 func NewManger() *Manager {
 	return &Manager{
-		syncCh:      make(chan map[string]config.Config),
-		targets:     make(map[string]config.Config),
-		updatert:    5 * time.Second,
-		triggerSend: make(chan struct{}, 1),
+		syncCh:       make(chan map[string]config.Config),
+		targets:      make(map[string]config.Config),
+		updatert:     5 * time.Second,
+		triggerSend:  make(chan struct{}, 1),
+		removeTaskCh: make(chan []config.Config),
 	}
 }
 
@@ -39,7 +41,8 @@ func (m *Manager) Run(ctx context.Context) {
 	if err != nil {
 		log.Fatalln("Can't create etcd client: ", err)
 	}
-	updates := client.Watch(context.TODO(), "config", clientv3.WithPrefix())
+	updates := client.Watch(context.TODO(), "config update", clientv3.WithPrefix())
+	removes := client.Watch(context.TODO(), "config remove", clientv3.WithPrefix())
 
 	for {
 		select {
@@ -66,6 +69,31 @@ func (m *Manager) Run(ctx context.Context) {
 			case m.triggerSend <- struct{}{}:
 			default:
 			}
+
+		case response, ok := <-removes:
+			if !ok {
+				log.Println("Discoverer channel closed")
+				return
+			}
+
+			if len(m.targets) == 0 {
+				log.Println("please apply a config")
+				continue
+			}
+
+			var configs []config.Config
+			m.mtx.Lock()
+			for _, event := range response.Events {
+				c, err := config.Unmarshal(event.Kv.Value)
+				if err != nil {
+					log.Printf("Config can't be unmarshal: %s\n", err)
+				}
+				configs = append(configs, c)
+				delete(m.targets, string(event.Kv.Key))
+			}
+			m.mtx.Unlock()
+
+			m.removeTaskCh <- configs
 		}
 	}
 }
@@ -111,4 +139,8 @@ func (m *Manager) allConfig() map[string]config.Config {
 
 func (m *Manager) SyncCh() <-chan map[string]config.Config {
 	return m.syncCh
+}
+
+func (m *Manager) RemoveCh() <-chan []config.Config {
+	return m.removeTaskCh
 }
