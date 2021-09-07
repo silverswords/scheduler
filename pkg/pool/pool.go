@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/silverswords/scheduler/pkg/config"
+	"github.com/silverswords/scheduler/pkg/message"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
+	"github.com/spf13/viper"
 )
 
 type Pool struct {
@@ -50,9 +52,48 @@ func (p *Pool) Run(configs <-chan map[string]config.Config) {
 				log.Printf("no such task: %s\n", sche.Name())
 				continue
 			} else {
-				err := task.Do(context.TODO())
-				if err != nil {
-					log.Println("task execute failed, err: ", err)
+				go task.Do(context.TODO())
+				data := <-task.Get()
+				if data.Err != nil {
+					log.Println("task execute failed, err: ", data.Err)
+				}
+
+				emailStart, ok := viper.Get("pusher.email.start").(int)
+				if !ok {
+					fmt.Println("email push config error: please input the int type")
+				}
+				if emailStart == 1 {
+					addrs, ok := viper.Get("pusher.email.addrs").([]interface{})
+					if !ok {
+						fmt.Println("email push config error: can't find addrs in config file")
+					}
+					addresses := make([]string, 0)
+					for _, addr := range addrs {
+						addr, ok := addr.(string)
+						if !ok {
+							fmt.Println("email push config error: wrong addr")
+						}
+
+						addresses = append(addresses, addr)
+					}
+					summary := fmt.Sprintf("task %s has been finished", sche.Name())
+					err := message.EmailPush(addresses, summary, data.Data)
+					if err != nil {
+						fmt.Println("email push failed", err)
+					}
+				}
+
+				wxStart, ok := viper.Get("pusher.wx.start").(int)
+				if !ok {
+					fmt.Println("wx push config error: please input the int type")
+				}
+				if wxStart == 1 {
+					// wxPush
+					summary := fmt.Sprintf("task %s has been finished", sche.Name())
+					err := message.WxPush(summary, data.Data)
+					if err != nil {
+						fmt.Println("wx push failed", err)
+					}
 				}
 			}
 			sche.Step()

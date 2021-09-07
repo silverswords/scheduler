@@ -25,6 +25,8 @@ var pusherCmd = &cobra.Command{
 		switch args[0] {
 		case "wx":
 			fmt.Println("//wxpusher.zjiecode.com/api/qrcode/IDfNy0EYxmfbZfyVDVuKfURdIZX8DoHEjtqQxliB1pGrkPYCIpUtEgoR6thLcuwS.jpg")
+		case "email":
+			// modify .niimtz config email
 		default:
 			fmt.Println("only support {wx} way")
 		}

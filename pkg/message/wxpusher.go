@@ -12,7 +12,7 @@ const (
 	topicID  = 3048
 )
 
-func Push(summary, content string) error {
+func WxPush(summary, content string) error {
 	msg := model.NewMessage(appToken).SetContent(content).SetSummary(summary).AddTopicId(topicID)
 	resps, err := wxpusher.SendMessage(msg)
 	if err != nil {

@@ -11,7 +11,6 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/silverswords/scheduler/pkg/message"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
 )
@@ -81,7 +80,10 @@ func (c *config) GetTag() string {
 }
 
 func (c *config) NewTask() (string, task.Task) {
-	return c.Name, task.TaskFunc(func(ctx context.Context) error {
+	dataCh := make(chan task.Data)
+
+	t := task.New(func(ctx context.Context) {
+		var data task.Data
 		var msg string
 		log.Printf("task %s run start\n", c.Name)
 		for _, step := range c.Jobs.Steps {
@@ -95,27 +97,23 @@ func (c *config) NewTask() (string, task.Task) {
 			}
 			output, err := cmd.Output()
 			if err != nil {
-				log.Printf("new task failed: %v", err)
+				data.Err = fmt.Errorf("new task failed: %v", err)
+				dataCh <- data
 			}
 
 			log.Print(string(output))
 			msg += fmt.Sprintf("step %s run result: %s\n", step.Name, string(output))
 		}
+		msg += fmt.Sprintf("task %s run finished\n", c.Name)
+		data.Data = msg
+		data.Err = nil
 
-		log.Printf("task %s run finished\n", c.Name)
-		summary := fmt.Sprintf("task %s run finished", c.Name)
-		err := message.Push(summary, msg)
-		if err != nil {
-			return err
-		}
-
-		err = message.Send(summary, msg)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		dataCh <- data
 	})
+
+	t.WithDataCh(dataCh)
+
+	return c.Name, t
 }
 
 func (c *config) NewSchedule() (schedule.Schedule, error) {
