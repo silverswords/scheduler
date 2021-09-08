@@ -15,8 +15,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var ()
-
 type Pool struct {
 	mu sync.Mutex
 
