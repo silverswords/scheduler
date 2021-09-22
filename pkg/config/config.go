@@ -22,11 +22,9 @@ var (
 )
 
 type Config interface {
-	IsSame(*Config) (bool, error)
+	IsSame(Config) (bool, error)
 	NewTask() (string, task.Task)
 	NewSchedule() (schedule.Schedule, error)
-	SetTag(string)
-	GetTag() string
 }
 
 type config struct {
@@ -34,9 +32,6 @@ type config struct {
 	Schedule Schedule
 	Jobs     Jobs
 	Upload   string
-	// in order to reload distinct once type task
-	// is a enum type: {"new", "old"}
-	Tag string
 }
 type Schedule struct {
 	Cron string
@@ -61,7 +56,7 @@ func (j Jobs) IsEmpty() bool {
 	return reflect.DeepEqual(j, Jobs{})
 }
 
-func Unmarshal(data []byte) (Config, error) {
+func Unmarshal(data []byte) (*config, error) {
 	c := config{}
 	if err := yaml.Unmarshal([]byte(data), &c); err != nil {
 		log.Fatalf("error: %v", err)
@@ -71,19 +66,8 @@ func Unmarshal(data []byte) (Config, error) {
 	return &c, nil
 }
 
-func (c *config) SetTag(tag string) {
-	c.Tag = tag
-}
-
-func (c *config) GetTag() string {
-	return c.Tag
-}
-
 func (c *config) NewTask() (string, task.Task) {
-	dataCh := make(chan task.Data)
-
-	t := task.New(func(ctx context.Context) {
-		var data task.Data
+	return c.Name, task.New(func(ctx context.Context) error {
 		var msg string
 		log.Printf("task %s run start\n", c.Name)
 		for _, step := range c.Jobs.Steps {
@@ -97,43 +81,40 @@ func (c *config) NewTask() (string, task.Task) {
 			}
 			output, err := cmd.Output()
 			if err != nil {
-				data.Err = fmt.Errorf("new task failed: %v", err)
-				dataCh <- data
+				return fmt.Errorf("new task failed: %v", err)
 			}
 
 			log.Print(string(output))
 			msg += fmt.Sprintf("step [%s] run result: %s\n", step.Name, string(output))
 		}
 		msg += fmt.Sprintf("task [%s] run finished\n", c.Name)
-		data.Data = msg
-		data.Err = nil
-
-		dataCh <- data
+		return nil
 	})
-
-	t.WithDataCh(dataCh)
-
-	return c.Name, t
 }
 
 func (c *config) NewSchedule() (schedule.Schedule, error) {
 	switch c.Schedule.Type {
 	case "once":
-		return schedule.NewOnceSchedule(c.Name, "once"), nil
+		return schedule.NewOnceSchedule(c.Name), nil
 	case "cron":
-		return schedule.NewCronSchedule(c.Name, c.Schedule.Cron, "cron")
+		return schedule.NewCronSchedule(c.Name, c.Schedule.Cron)
 	}
 
 	return nil, errors.New("error schedule type")
 }
 
-func (c *config) IsSame(newConfig *Config) (bool, error) {
+func (c *config) IsSame(newConfig Config) (bool, error) {
 	old, err := yaml.Marshal(c)
 	if err != nil {
 		return false, err
 	}
 
-	new, err := yaml.Marshal(newConfig)
+	config, ok := newConfig.(*config)
+	if !ok {
+		return false, errors.New("not the same type")
+	}
+
+	new, err := yaml.Marshal(config)
 	if err != nil {
 		return false, err
 	}
@@ -150,6 +131,7 @@ func Validate(data []byte) error {
 	if c.Name == "" {
 		return errEmptyName
 	}
+
 	if c.Schedule.IsEmapty() {
 		return errEmptySchedule
 	}
