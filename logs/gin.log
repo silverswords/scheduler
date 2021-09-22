@@ -4,6 +4,6 @@
  - using env:	export GIN_MODE=release
  - using code:	gin.SetMode(gin.ReleaseMode)
 
-[GIN-debug] POST   /upload                   --> github.com/silverswords/scheduler/pkg/upload.(*Manager).upload-fm (3 handlers)
-[GIN-debug] Listening and serving HTTP on :8080
-[GIN] 2021/09/08 - 00:30:49 |[97;42m 200 [0m|     721.826µs |    192.168.0.24 |[97;46m POST    [0m "/upload"
+[GIN-debug] POST   /upload                   --> github.com/silverswords/scheduler/pkg/server.(*Manager).upload-fm (3 handlers)
+[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
+[GIN] 2021/09/22 - 11:06:07 |[97;42m 200 [0m|  221.358135ms |    192.168.0.24 |[97;46m POST    [0m "/upload"
