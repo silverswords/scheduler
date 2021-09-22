@@ -46,8 +46,6 @@ var startCmd = &cobra.Command{
 		go configDiscover.Run(context.Background(), client)
 		go workerDiscover.Run(context.Background(), client)
 
-		go upload.ListenAndServe()
-
 		go server.ListenAndServe()
 
 		scheduler.New().Run(client, configDiscover.SyncCh(), workerDiscover.SyncCh())

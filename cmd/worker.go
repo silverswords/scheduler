@@ -20,7 +20,7 @@ var workerCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		worker := worker.New("worker1")
+		worker := worker.New(args[0])
 		worker.Run(context.TODO(), endpoints)
 		return nil
 	},
