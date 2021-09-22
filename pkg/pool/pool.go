@@ -1,18 +1,16 @@
 package pool
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/coreos/etcd/Godeps/_workspace/src/golang.org/x/net/context"
 	"github.com/silverswords/scheduler/pkg/config"
-	"github.com/silverswords/scheduler/pkg/message"
 	"github.com/silverswords/scheduler/pkg/schedule"
-	"github.com/silverswords/scheduler/pkg/task"
-	"github.com/spf13/viper"
+	"go.etcd.io/etcd/clientv3"
 )
 
 type Pool struct {
@@ -20,7 +18,6 @@ type Pool struct {
 
 	// once      sync.Once
 	stop      <-chan struct{}
-	tasks     map[string]task.Task
 	schedules []schedule.Schedule
 
 	isRunning bool
@@ -29,18 +26,20 @@ type Pool struct {
 	configs       map[string]config.Config
 	triggerReload chan struct{}
 	syncCh        chan struct{}
+
+	workers map[string]bool
 }
 
 func New() *Pool {
 	return &Pool{
-		tasks:         make(map[string]task.Task),
 		stop:          make(<-chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
+		workers:       make(map[string]bool),
 	}
 }
 
-func (p *Pool) Run(configs <-chan map[string]config.Config, removeTaskCh <-chan []config.Config) {
+func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
 	p.isRunning = true
 	go p.reload()
 	go p.reloader(configs)
@@ -51,99 +50,66 @@ func (p *Pool) Run(configs <-chan map[string]config.Config, removeTaskCh <-chan 
 		select {
 		case <-timer.C:
 			sche := p.schedules[0]
-			if task, ok := p.tasks[sche.Name()]; !ok {
-				log.Printf("no such task: %s\n", sche.Name())
-				continue
-			} else {
-				go task.Do(context.TODO())
-				data := <-task.Get()
-				if data.Err != nil {
-					log.Println("task execute failed, err: ", data.Err)
-				}
+			fmt.Println(p.workers)
 
-				emailStart, ok := viper.Get("pusher.email.start").(int)
-				if !ok {
-					fmt.Println("email push config error: please input the int type")
-				}
-				if emailStart == 1 {
-					addrs, ok := viper.Get("pusher.email.addrs").([]interface{})
-					if !ok {
-						fmt.Println("email push config error: can't find addrs in config file")
+			for k, v := range p.workers {
+				if v {
+					if _, err := client.Put(context.Background(), "worker/"+k+"/"+sche.Name()+time.Now().Format(time.RFC3339), sche.Name()); err != nil {
+						log.Println("deliver task fail:", err)
+						continue
 					}
-					addresses := make([]string, 0)
-					for _, addr := range addrs {
-						addr, ok := addr.(string)
-						if !ok {
-							fmt.Println("email push config error: wrong addr")
-						}
-
-						addresses = append(addresses, addr)
-					}
-					summary := fmt.Sprintf("task %s has been finished", sche.Name())
-					err := message.EmailPush(addresses, summary, data.Data)
-					if err != nil {
-						fmt.Println("email push failed", err)
-					}
-				}
-
-				wxStart, ok := viper.Get("pusher.wx.start").(int)
-				if !ok {
-					fmt.Println("wx push config error: please input the int type")
-				}
-				if wxStart == 1 {
-					// wxPush
-					summary := fmt.Sprintf("task %s has been finished", sche.Name())
-					err := message.WxPush(summary, data.Data)
-					if err != nil {
-						fmt.Println("wx push failed", err)
-					}
+					log.Printf("deliver task success, worker: %s, task: %s", k, sche.Name())
+					break
 				}
 			}
+
 			sche.Step()
+
 			timer = p.caculateTimer()
 			if time.Until(p.schedules[0].Next()).Hours() < -10000 {
 				log.Println("all task have been completed")
 				continue
 			}
+
 			if p.schedules[0].Kind() == "once" {
 				log.Printf("recaculate timer, next task is %s, next run right now\n", p.schedules[0].Name())
 				continue
 			}
+
 			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
 
 		case <-p.syncCh:
 			timer = p.caculateTimer()
 			if p.schedules[0].Kind() == "once" {
-				log.Printf("recaculate timer, next task is %s, next run right now\n", p.schedules[0].Name())
+				log.Printf("recaculate timer, next task is %s, next run right now\n%v\n", p.schedules[0].Name(), timer)
 				continue
 			}
+
 			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
-
-		case configs := <-removeTaskCh:
-			for _, c := range configs {
-				name, _ := c.NewTask()
-				for i, schedule := range p.schedules {
-					if name == schedule.Name() {
-						p.schedules[i], p.schedules[len(p.schedules)-1] = p.schedules[len(p.schedules)-1], p.schedules[i]
-						p.schedules = p.schedules[:len(p.schedules)-1]
-					}
+		case newWorkers := <-workers:
+			for k, v := range newWorkers {
+				if v != "online" {
+					p.workers[k] = false
 				}
-
-				delete(p.tasks, name)
+				p.workers[k] = true
 			}
 
-			timer = p.caculateTimer()
-
+			log.Printf("update worker list: %v", p.workers)
 		case <-p.stop:
 			return
 		}
 	}
 }
 
-func (p *Pool) reloader(configs <-chan map[string]config.Config) {
+func (p *Pool) reloader(configs <-chan map[string]interface{}) {
 	for {
 		select {
-		case newConfigs := <-configs:
+		case new := <-configs:
+			newConfigs := make(map[string]config.Config)
+			for k, v := range new {
+				newConfigs[k] = v.(config.Config)
+			}
+
 			p.SetConfig(newConfigs)
 			select {
 			case p.triggerReload <- struct{}{}:
@@ -187,49 +153,19 @@ func (p *Pool) sync() {
 	p.mu.Lock()
 	for key, config := range p.configs {
 		if oldConfig, ok := p.oldConfigs[key]; ok {
-			same, err := oldConfig.IsSame(&config)
+			same, err := oldConfig.IsSame(config)
 			if err != nil {
 				log.Printf("isSame error: %v", err)
+				continue
 			}
+
 			if same {
-				if config.GetTag() == "new" {
-					schedule, err := config.NewSchedule()
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-					if schedule.Kind() == "once" {
-						for i, s := range p.schedules {
-							if s.Name() == schedule.Name() {
-								p.schedules[i] = schedule
-							}
-						}
-					}
-				}
-				config.SetTag("old")
-				continue
-			} else {
-				config.SetTag("old")
-				name, task := config.NewTask()
-				log.Printf("task %s has been created", name)
-				p.tasks[name] = task
-				schedule, err := config.NewSchedule()
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				for i, s := range p.schedules {
-					if s.Name() == schedule.Name() {
-						p.schedules[i] = schedule
-					}
-				}
 				continue
 			}
+
+			log.Printf("%s config update: \n	old: %v\n	new: %v\n", key, oldConfig, config)
 		}
-		config.SetTag("old")
-		name, task := config.NewTask()
-		log.Printf("task %s has been created", name)
-		p.tasks[name] = task
+
 		schedule, err := config.NewSchedule()
 		if err != nil {
 			log.Println(err)
