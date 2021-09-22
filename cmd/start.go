@@ -10,7 +10,7 @@ import (
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/discover"
 	scheduler "github.com/silverswords/scheduler/pkg/pool"
-	"github.com/silverswords/scheduler/pkg/upload"
+	"github.com/silverswords/scheduler/pkg/server"
 	"github.com/silverswords/scheduler/pkg/util"
 )
 
@@ -47,6 +47,8 @@ var startCmd = &cobra.Command{
 		go workerDiscover.Run(context.Background(), client)
 
 		go upload.ListenAndServe()
+
+		go server.ListenAndServe()
 
 		scheduler.New().Run(client, configDiscover.SyncCh(), workerDiscover.SyncCh())
 		return nil
