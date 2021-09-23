@@ -23,7 +23,7 @@ type cronSchedule struct {
 	kind string
 }
 
-func NewCronSchedule(name, cronStr, kind string) (Schedule, error) {
+func NewCronSchedule(name, cronStr string) (Schedule, error) {
 	s, err := standardParser.Parse(cronStr)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func NewCronSchedule(name, cronStr, kind string) (Schedule, error) {
 	return &cronSchedule{
 		name: name,
 		s:    s,
-		kind: kind,
+		kind: "cron",
 	}, nil
 }
 
@@ -77,8 +77,8 @@ type onceSchedule struct {
 	kind string
 }
 
-func NewOnceSchedule(name, kind string) Schedule {
-	return &onceSchedule{name: name, next: time.Now(), kind: kind}
+func NewOnceSchedule(name string) Schedule {
+	return &onceSchedule{name: name, next: time.Now(), kind: "once"}
 }
 
 func (o *onceSchedule) Name() string {

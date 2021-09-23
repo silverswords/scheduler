@@ -1,9 +1,0 @@
-[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
-
-[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
- - using env:	export GIN_MODE=release
- - using code:	gin.SetMode(gin.ReleaseMode)
-
-[GIN-debug] POST   /upload                   --> github.com/silverswords/scheduler/pkg/server.(*Manager).upload-fm (3 handlers)
-[GIN-debug] Listening and serving HTTP on 0.0.0.0:8080
-[GIN] 2021/09/22 - 11:06:07 |[97;42m 200 [0m|  221.358135ms |    192.168.0.24 |[97;46m POST    [0m "/upload"

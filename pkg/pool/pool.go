@@ -2,6 +2,7 @@ package pool
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -9,15 +10,15 @@ import (
 
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/schedule"
-	"github.com/silverswords/scheduler/pkg/task"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type Pool struct {
-	mu sync.Mutex
+	mu      sync.Mutex
+	rwMutex sync.RWMutex
 
 	// once      sync.Once
 	stop      <-chan struct{}
-	tasks     map[string]task.Task
 	schedules []schedule.Schedule
 
 	isRunning bool
@@ -26,18 +27,20 @@ type Pool struct {
 	configs       map[string]config.Config
 	triggerReload chan struct{}
 	syncCh        chan struct{}
+
+	workers map[string]bool
 }
 
 func New() *Pool {
 	return &Pool{
-		tasks:         make(map[string]task.Task),
 		stop:          make(<-chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
+		workers:       make(map[string]bool),
 	}
 }
 
-func (p *Pool) Run(configs <-chan map[string]config.Config, removeTaskCh <-chan []config.Config) {
+func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
 	p.isRunning = true
 	go p.reload()
 	go p.reloader(configs)
@@ -48,50 +51,67 @@ func (p *Pool) Run(configs <-chan map[string]config.Config, removeTaskCh <-chan 
 		select {
 		case <-timer.C:
 			sche := p.schedules[0]
-			if task, ok := p.tasks[sche.Name()]; !ok {
-				log.Printf("no such task: %s\n", sche.Name())
-				continue
-			} else {
-				go task.Do(context.TODO())
-				data := <-task.Get()
-				if data.Err != nil {
-					log.Println("task execute failed, err: ", data.Err)
+			p.rwMutex.RLock()
+
+			for k, v := range p.workers {
+				if v {
+					fmt.Println(k, sche.Name())
+					if _, err := client.Put(context.Background(), "worker/"+k+"/"+sche.Name()+time.Now().Format(time.RFC3339), sche.Name()); err != nil {
+						log.Println("deliver task fail:", err)
+						continue
+					}
+					log.Printf("deliver task success, worker: %s, task: %s", k, sche.Name())
+					break
 				}
 			}
+			p.rwMutex.RUnlock()
+
 			sche.Step()
 			timer = p.caculateTimer()
-			if time.Until(p.schedules[0].Next()).Hours() < -10000 {
+			p.mu.Lock()
+			nextSche := p.schedules[0]
+
+			if time.Until(nextSche.Next()).Hours() < -10000 {
 				log.Println("all task have been completed")
 				continue
 			}
-			if p.schedules[0].Kind() == "once" {
-				log.Printf("recaculate timer, next task is %s, next run right now\n", p.schedules[0].Name())
+
+			if nextSche.Kind() == "once" {
+				log.Printf("recaculate timer, next task is %s, next run right now\n", nextSche.Name())
 				continue
 			}
-			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
+
+			log.Printf("recaculate timer, next task is %s, next run after %s\n", nextSche.Name(), time.Until(nextSche.Next()))
+			p.mu.Unlock()
 
 		case <-p.syncCh:
 			timer = p.caculateTimer()
-			if p.schedules[0].Kind() == "once" {
-				log.Printf("recaculate timer, next task is %s, next run right now\n", p.schedules[0].Name())
+			p.mu.Lock()
+			if len(p.schedules) == 0 {
 				continue
 			}
-			log.Printf("recaculate timer, next task is %s, next run after %s\n", p.schedules[0].Name(), time.Until(p.schedules[0].Next()))
+			sche := p.schedules[0]
+			p.mu.Unlock()
 
-		case configs := <-removeTaskCh:
-			for _, c := range configs {
-				name, _ := c.NewTask()
-				for i, schedule := range p.schedules {
-					if name == schedule.Name() {
-						p.schedules[i], p.schedules[len(p.schedules)-1] = p.schedules[len(p.schedules)-1], p.schedules[i]
-						p.schedules = p.schedules[:len(p.schedules)-1]
-					}
-				}
-
-				delete(p.tasks, name)
+			if sche.Kind() == "once" {
+				log.Printf("recaculate timer, next task is %s, next run right now\n%v\n", sche.Name(), timer)
+				continue
 			}
 
-			timer = p.caculateTimer()
+			log.Printf("recaculate timer, next task is %s, next run after %s\n", sche.Name(), time.Until(sche.Next()))
+
+		case newWorkers := <-workers:
+			p.rwMutex.Lock()
+			for k, v := range newWorkers {
+				if v != "online" {
+					p.workers[k] = false
+				} else {
+					p.workers[k] = true
+				}
+			}
+
+			log.Printf("update worker list: %v", p.workers)
+			p.rwMutex.Unlock()
 
 		case <-p.stop:
 			return
@@ -99,10 +119,15 @@ func (p *Pool) Run(configs <-chan map[string]config.Config, removeTaskCh <-chan 
 	}
 }
 
-func (p *Pool) reloader(configs <-chan map[string]config.Config) {
+func (p *Pool) reloader(configs <-chan map[string]interface{}) {
 	for {
 		select {
-		case newConfigs := <-configs:
+		case new := <-configs:
+			newConfigs := make(map[string]config.Config)
+			for k, v := range new {
+				newConfigs[k] = v.(config.Config)
+			}
+
 			p.SetConfig(newConfigs)
 			select {
 			case p.triggerReload <- struct{}{}:
@@ -146,49 +171,19 @@ func (p *Pool) sync() {
 	p.mu.Lock()
 	for key, config := range p.configs {
 		if oldConfig, ok := p.oldConfigs[key]; ok {
-			same, err := oldConfig.IsSame(&config)
+			same, err := oldConfig.IsSame(config)
 			if err != nil {
 				log.Printf("isSame error: %v", err)
+				continue
 			}
+
 			if same {
-				if config.GetTag() == "new" {
-					schedule, err := config.NewSchedule()
-					if err != nil {
-						log.Println(err)
-						continue
-					}
-					if schedule.Kind() == "once" {
-						for i, s := range p.schedules {
-							if s.Name() == schedule.Name() {
-								p.schedules[i] = schedule
-							}
-						}
-					}
-				}
-				config.SetTag("old")
-				continue
-			} else {
-				config.SetTag("old")
-				name, task := config.NewTask()
-				log.Printf("task %s has been created", name)
-				p.tasks[name] = task
-				schedule, err := config.NewSchedule()
-				if err != nil {
-					log.Println(err)
-					continue
-				}
-				for i, s := range p.schedules {
-					if s.Name() == schedule.Name() {
-						p.schedules[i] = schedule
-					}
-				}
 				continue
 			}
+
+			log.Printf("%s config update: \n	old: %v\n	new: %v\n", key, oldConfig, config)
 		}
-		config.SetTag("old")
-		name, task := config.NewTask()
-		log.Printf("task %s has been created", name)
-		p.tasks[name] = task
+
 		schedule, err := config.NewSchedule()
 		if err != nil {
 			log.Println(err)
