@@ -62,6 +62,7 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) {
 			for _, event := range response.Events {
 				remoteTask, err := UnmarshalRemoteTask(ctx, event.Kv.Value)
 				if err != nil {
+					log.Printf("can't unmarshal remote task, err: %s\n", err)
 					continue
 				}
 
@@ -82,14 +83,13 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) {
 					client.Put(ctx, string(event.Kv.Key), string(value))
 				}()
 				log.Printf("doing task %s\n", remoteTask.Name)
-
 			}
 		}
 	}
 }
 
 func UnmarshalRemoteTask(ctx context.Context, value []byte) (*task.RemoteTask, error) {
-	var remoteTask *task.RemoteTask
+	var remoteTask task.RemoteTask
 	remoteTask.Decode(value)
 
 	client, err := util.GetEtcdClient()
@@ -106,7 +106,7 @@ func UnmarshalRemoteTask(ctx context.Context, value []byte) (*task.RemoteTask, e
 		return nil, errors.New("no config return")
 	}
 
-	if len(res.Kvs) >= 1 {
+	if len(res.Kvs) > 1 {
 		return nil, errors.New("too many config")
 	}
 
@@ -117,5 +117,5 @@ func UnmarshalRemoteTask(ctx context.Context, value []byte) (*task.RemoteTask, e
 
 	_, task := c.NewTask()
 	remoteTask.SetTask(task)
-	return remoteTask, nil
+	return &remoteTask, nil
 }

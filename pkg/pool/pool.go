@@ -98,7 +98,7 @@ func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{
 			p.rwMutex.Lock()
 			for k, v := range newWorkers {
 				if v != "online" {
-					p.workers[k] = false
+					delete(p.workers, k)
 				} else {
 					p.workers[k] = true
 				}

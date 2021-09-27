@@ -27,11 +27,12 @@ func (t taskFunc) Do(ctx context.Context) error {
 }
 
 type RemoteTask struct {
-	Name      string
-	StartTime time.Time
-	Err       error
-	Done      bool
-	t         Task
+	Name      string    `json:"name,omitempty"`
+	StartTime time.Time `json:"start_time,omitempty"`
+	Err       error     `json:"err,omitempty"`
+	Done      bool      `json:"done,omitempty"`
+
+	t Task
 }
 
 func (t *RemoteTask) Do(ctx context.Context) error {
