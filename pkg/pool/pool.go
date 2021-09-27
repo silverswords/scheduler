@@ -63,10 +63,16 @@ func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{
 		case <-timer.C:
 			sche := p.schedules[0]
 			fmt.Println(p.workers)
-			p.queue.Add(&task.RemoteTask{
+			t := &task.RemoteTask{
 				Name:      sche.Name(),
 				StartTime: sche.Next(),
-			})
+			}
+
+			if s, ok := sche.(schedule.PrioritySchedule); ok {
+				t.Priority = s.Priority()
+			}
+
+			p.queue.Add(t)
 			sche.Step()
 			timer = p.caculateTimer()
 			p.mu.Lock()
