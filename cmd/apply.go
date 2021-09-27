@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
-	"time"
 
 	taskConfig "github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/util"
 	"github.com/spf13/cobra"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func init() {
@@ -38,18 +36,11 @@ var applyCmd = &cobra.Command{
 			return err
 		}
 
-		endpoints, err := util.GetEndpoints()
+		client, err := util.GetEtcdClient()
 		if err != nil {
 			return err
 		}
 
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   endpoints,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
 		defer client.Close()
 
 		if _, err := client.Put(context.TODO(), "config/"+config.Name, string(data)); err != nil {

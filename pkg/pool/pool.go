@@ -208,6 +208,17 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 			log.Println(err)
 			continue
 		}
+
+		if len(p.workers) == 0 {
+			log.Println("task scheduling failed, no worker is running")
+			p.queue.Done(task)
+			p.queue.Add(task)
+
+			for len(p.workers) == 0 {
+			}
+			continue
+		}
+
 		for k, v := range p.workers {
 			if v {
 				key := "worker/" + k + "/" + task.Name + time.Now().Format(time.RFC3339)

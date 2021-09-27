@@ -31,10 +31,21 @@ type RemoteTask struct {
 	StartTime time.Time
 	Err       error
 	Done      bool
+	t         Task
 }
 
-func (t *RemoteTask) Do(context context.Context) error {
-	return nil
+func (t *RemoteTask) Do(ctx context.Context) error {
+	if err := t.t.Do(ctx); err != nil {
+		t.Err = err
+	}
+
+	t.Done = true
+
+	return t.Err
+}
+
+func (t *RemoteTask) SetTask(task Task) {
+	t.t = task
 }
 
 func (t *RemoteTask) Encode() ([]byte, error) {

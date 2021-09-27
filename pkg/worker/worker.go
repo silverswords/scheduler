@@ -2,12 +2,14 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
 
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/task"
+	"github.com/silverswords/scheduler/pkg/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -15,21 +17,16 @@ type Worker struct {
 	name string
 }
 
+// New create a new worker
 func New(name string) *Worker {
 	return &Worker{
 		name: name,
 	}
 }
 
-func (w *Worker) Run(ctx context.Context, endpoints []string) {
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   endpoints,
-		DialTimeout: 5 * time.Second,
-	})
-	if err != nil {
-		log.Fatalln("Can't create etcd client: ", err)
-	}
-
+// Run starts to run the worker, registers itself under `workers` of
+// etcd, and monitors the tasks under `worker/worker-name`
+func (w *Worker) Run(ctx context.Context, client *clientv3.Client) {
 	lease := clientv3.NewLease(client)
 	leaseResponse, err := lease.Grant(ctx, 10)
 	if err != nil {
@@ -50,7 +47,6 @@ func (w *Worker) Run(ctx context.Context, endpoints []string) {
 		}
 	}()
 
-	// defer client.Delete(ctx, "workers/"+w.name)
 	watchCh := client.Watch(ctx, "worker/"+w.name, clientv3.WithPrefix())
 
 	for {
@@ -64,41 +60,62 @@ func (w *Worker) Run(ctx context.Context, endpoints []string) {
 			}
 
 			for _, event := range response.Events {
-				var remoteTask task.RemoteTask
-				remoteTask.Decode(event.Kv.Value)
+				remoteTask, err := UnmarshalRemoteTask(ctx, event.Kv.Value)
+				if err != nil {
+					continue
+				}
+
 				if remoteTask.Done {
 					continue
 				}
 
-				res, err := client.Get(ctx, "config/"+remoteTask.Name, clientv3.WithFirstKey()...)
-				if err != nil {
-					log.Printf("Can't get config: %s\n", err)
-				}
-
-				for _, kv := range res.Kvs {
-					c, err := config.Unmarshal(kv.Value)
-					if err != nil {
-						log.Printf("Config can't be unmarshal: %s\n", err)
-						continue
+				go func() {
+					if err := remoteTask.Do(ctx); err != nil {
+						log.Printf("task %s err: %s\n", remoteTask.Name, err)
 					}
 
-					taskName, task := c.NewTask()
-					go func() {
-						if err := task.Do(ctx); err != nil {
-							remoteTask.Err = err
-						}
+					value, err := remoteTask.Encode()
+					if err != nil {
+						log.Printf("can't not marshal remoteTask")
+						return
+					}
+					client.Put(ctx, string(event.Kv.Key), string(value))
+				}()
+				log.Printf("doing task %s\n", remoteTask.Name)
 
-						remoteTask.Done = true
-						value, err := remoteTask.Encode()
-						if err != nil {
-							log.Printf("can't not marshal remoteTask")
-							return
-						}
-						client.Put(ctx, string(event.Kv.Key), string(value))
-					}()
-					log.Printf("do task %s\n", taskName)
-				}
 			}
 		}
 	}
+}
+
+func UnmarshalRemoteTask(ctx context.Context, value []byte) (*task.RemoteTask, error) {
+	var remoteTask *task.RemoteTask
+	remoteTask.Decode(value)
+
+	client, err := util.GetEtcdClient()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := client.Get(ctx, "config/"+remoteTask.Name, clientv3.WithFirstKey()...)
+	if err != nil {
+		log.Printf("Can't get config: %s\n", err)
+	}
+
+	if len(res.Kvs) == 0 {
+		return nil, errors.New("no config return")
+	}
+
+	if len(res.Kvs) >= 1 {
+		return nil, errors.New("too many config")
+	}
+
+	c, err := config.Unmarshal(res.Kvs[0].Value)
+	if err != nil {
+		return nil, err
+	}
+
+	_, task := c.NewTask()
+	remoteTask.SetTask(task)
+	return remoteTask, nil
 }
