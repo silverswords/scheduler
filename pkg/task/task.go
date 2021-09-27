@@ -3,6 +3,8 @@ package task
 import (
 	"context"
 	"time"
+
+	"gopkg.in/yaml.v2"
 )
 
 type Task interface {
@@ -24,11 +26,21 @@ func (t taskFunc) Do(ctx context.Context) error {
 	return t(ctx)
 }
 
-type remoteTask struct {
+type RemoteTask struct {
 	Name      string
 	StartTime time.Time
+	Err       error
+	Done      bool
 }
 
-func (t *remoteTask) Do(ctx context.Context) error {
+func (t *RemoteTask) Do(context context.Context) error {
 	return nil
+}
+
+func (t *RemoteTask) Encode() ([]byte, error) {
+	return yaml.Marshal(t)
+}
+
+func (t *RemoteTask) Decode(data []byte) error {
+	return yaml.Unmarshal(data, t)
 }

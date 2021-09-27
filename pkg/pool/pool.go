@@ -10,12 +10,15 @@ import (
 
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/schedule"
+	"github.com/silverswords/scheduler/pkg/task"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 type Pool struct {
 	mu      sync.Mutex
 	rwMutex sync.RWMutex
+
+	queue Queue
 
 	// once      sync.Once
 	stop      <-chan struct{}
@@ -33,6 +36,7 @@ type Pool struct {
 
 func New() *Pool {
 	return &Pool{
+		queue:         NewQueue(),
 		stop:          make(<-chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
@@ -44,28 +48,18 @@ func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{
 	p.isRunning = true
 	go p.reload()
 	go p.reloader(configs)
+	go p.dispatcher(client)
 
 	timer := p.caculateTimer()
-
 	for {
 		select {
 		case <-timer.C:
 			sche := p.schedules[0]
-			p.rwMutex.RLock()
-
-			for k, v := range p.workers {
-				if v {
-					fmt.Println(k, sche.Name())
-					if _, err := client.Put(context.Background(), "worker/"+k+"/"+sche.Name()+time.Now().Format(time.RFC3339), sche.Name()); err != nil {
-						log.Println("deliver task fail:", err)
-						continue
-					}
-					log.Printf("deliver task success, worker: %s, task: %s", k, sche.Name())
-					break
-				}
-			}
-			p.rwMutex.RUnlock()
-
+			fmt.Println(p.workers)
+			p.queue.Add(&task.RemoteTask{
+				Name:      sche.Name(),
+				StartTime: sche.Next(),
+			})
 			sche.Step()
 			timer = p.caculateTimer()
 			p.mu.Lock()
@@ -204,4 +198,56 @@ func (p *Pool) caculateTimer() *time.Timer {
 	} else {
 		return time.NewTimer(time.Until(p.schedules[0].Next()))
 	}
+}
+
+func (p *Pool) dispatcher(client *clientv3.Client) {
+	for {
+		task := p.queue.Get().(*task.RemoteTask)
+		value, err := task.Encode()
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		for k, v := range p.workers {
+			if v {
+				key := "worker/" + k + "/" + task.Name + time.Now().Format(time.RFC3339)
+				if _, err := client.Put(context.Background(), key, string(value)); err != nil {
+					log.Println("deliver task fail:", err)
+					continue
+				}
+				log.Printf("deliver task success, worker: %s, task: %s", k, task.Name)
+				go func() {
+					watchChan := client.Watch(context.Background(), key)
+				watch:
+					events, ok := <-watchChan
+					if !ok {
+						log.Printf("watch task %s channel has closed", task.Name)
+						return
+					}
+
+					for _, event := range events.Events {
+						err := task.Decode(event.Kv.Value)
+						if err != nil {
+							log.Printf("can't unmarshal task, err:%s\n", err)
+							continue
+						}
+
+						if !task.Done {
+							goto watch
+						}
+						p.queue.Done(task)
+						if task.Err != nil {
+							log.Printf("task run fail, error: %s\n", task.Err)
+							task.Done, task.Err = false, nil
+							p.queue.Add(task)
+						}
+
+						log.Printf("task %s run success\n", task.Name)
+					}
+				}()
+				break
+			}
+		}
+	}
+
 }

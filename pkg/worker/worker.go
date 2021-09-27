@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/silverswords/scheduler/pkg/config"
+	"github.com/silverswords/scheduler/pkg/task"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -63,7 +64,13 @@ func (w *Worker) Run(ctx context.Context, endpoints []string) {
 			}
 
 			for _, event := range response.Events {
-				res, err := client.Get(ctx, "config/"+string(event.Kv.Value), clientv3.WithFirstKey()...)
+				var remoteTask task.RemoteTask
+				remoteTask.Decode(event.Kv.Value)
+				if remoteTask.Done {
+					continue
+				}
+
+				res, err := client.Get(ctx, "config/"+remoteTask.Name, clientv3.WithFirstKey()...)
 				if err != nil {
 					log.Printf("Can't get config: %s\n", err)
 				}
@@ -72,10 +79,23 @@ func (w *Worker) Run(ctx context.Context, endpoints []string) {
 					c, err := config.Unmarshal(kv.Value)
 					if err != nil {
 						log.Printf("Config can't be unmarshal: %s\n", err)
+						continue
 					}
 
 					taskName, task := c.NewTask()
-					go task.Do(ctx)
+					go func() {
+						if err := task.Do(ctx); err != nil {
+							remoteTask.Err = err
+						}
+
+						remoteTask.Done = true
+						value, err := remoteTask.Encode()
+						if err != nil {
+							log.Printf("can't not marshal remoteTask")
+							return
+						}
+						client.Put(ctx, string(event.Kv.Key), string(value))
+					}()
 					log.Printf("do task %s\n", taskName)
 				}
 			}
