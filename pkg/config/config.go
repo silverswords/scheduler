@@ -34,8 +34,9 @@ type config struct {
 	Upload   string
 }
 type Schedule struct {
-	Cron string
-	Type string
+	Cron     string
+	Type     string
+	Priority int
 }
 
 func (s Schedule) IsEmapty() bool {
@@ -92,15 +93,24 @@ func (c *config) NewTask() (string, task.Task) {
 	})
 }
 
-func (c *config) NewSchedule() (schedule.Schedule, error) {
+func (c *config) NewSchedule() (s schedule.Schedule, err error) {
 	switch c.Schedule.Type {
 	case "once":
-		return schedule.NewOnceSchedule(c.Name), nil
+		s = schedule.NewOnceSchedule(c.Name)
 	case "cron":
-		return schedule.NewCronSchedule(c.Name, c.Schedule.Cron)
+		s, err = schedule.NewCronSchedule(c.Name, c.Schedule.Cron)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, errors.New("error schedule type")
 	}
 
-	return nil, errors.New("error schedule type")
+	if c.Schedule.Priority != 0 {
+		s = schedule.NewPrioritySchedule(s, c.Schedule.Priority)
+	}
+
+	return
 }
 
 func (c *config) IsSame(newConfig Config) (bool, error) {

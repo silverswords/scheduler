@@ -2,6 +2,7 @@ name: shell_task_cron
 schedule:
   type: cron
   cron: "*/1 * * * *"
+  priority: 5
 jobs:
   env:
     TASKTYPE: shell

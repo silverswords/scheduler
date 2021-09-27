@@ -1,6 +1,7 @@
 name: shell_task_once
 schedule:
   type: once
+  priority: 3
 jobs:
   env:
     TASKTYPE: shell

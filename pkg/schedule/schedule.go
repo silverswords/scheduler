@@ -13,6 +13,27 @@ type Schedule interface {
 	Kind() string
 }
 
+type PrioritySchedule interface {
+	Schedule
+	Priority() int
+}
+
+type prioritySchedule struct {
+	Schedule
+	priority int
+}
+
+func NewPrioritySchedule(schedule Schedule, priority int) PrioritySchedule {
+	return &prioritySchedule{
+		schedule,
+		priority,
+	}
+}
+
+func (s *prioritySchedule) Priority() int {
+	return s.priority
+}
+
 var standardParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 
 type cronSchedule struct {

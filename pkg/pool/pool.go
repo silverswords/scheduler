@@ -35,8 +35,15 @@ type Pool struct {
 }
 
 func New() *Pool {
+	queue := NewQueue()
+	queue.SetCompareFunc( // CompareByPriority is the Less function used priority
+		CompareFunc(func(t1, t2 task.Task) bool {
+			return t1.(*task.RemoteTask).Priority < t2.(*task.RemoteTask).Priority
+		}),
+	)
+
 	return &Pool{
-		queue:         NewQueue(),
+		queue:         queue,
 		stop:          make(<-chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),

@@ -31,6 +31,7 @@ type RemoteTask struct {
 	StartTime time.Time `json:"start_time,omitempty"`
 	Err       error     `json:"err,omitempty"`
 	Done      bool      `json:"done,omitempty"`
+	Priority  int
 
 	t Task
 }
