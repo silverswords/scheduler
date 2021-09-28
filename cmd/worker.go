@@ -3,10 +3,12 @@ package cmd
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/silverswords/scheduler/pkg/util"
 	"github.com/silverswords/scheduler/pkg/worker"
 	"github.com/spf13/cobra"
+	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 func init() {
@@ -24,13 +26,20 @@ var workerCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		client, err := util.GetEtcdClient()
+		endpoints, err := util.GetEndpoints()
+		if err != nil {
+			return err
+		}
+
+		client, err := clientv3.New(clientv3.Config{
+			Endpoints:   endpoints,
+			DialTimeout: 5 * time.Second,
+		})
 		if err != nil {
 			return err
 		}
 
 		worker := worker.New(args[0])
-		worker.Run(context.TODO(), client)
-		return nil
+		return worker.Run(context.TODO(), client)
 	},
 }

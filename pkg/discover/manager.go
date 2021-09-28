@@ -12,6 +12,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// Manager is the service discovery controller, which monitors
+// the key of etcd and notifies the update
 type Manager struct {
 	f        func([]byte) (interface{}, error)
 	watchKey string
@@ -24,6 +26,7 @@ type Manager struct {
 	triggerSend chan struct{}
 }
 
+// NewManger Create a manager that watches to watchKey
 func NewManger(watchKey string, f func([]byte) (interface{}, error)) *Manager {
 	return &Manager{
 		watchKey: watchKey,
@@ -36,6 +39,7 @@ func NewManger(watchKey string, f func([]byte) (interface{}, error)) *Manager {
 	}
 }
 
+// Run lets the manager start watching
 func (m *Manager) Run(ctx context.Context, client *clientv3.Client) {
 	go m.sender(ctx)
 	response, err := client.Get(ctx, m.watchKey, clientv3.WithPrefix())
@@ -132,6 +136,7 @@ func (m *Manager) allTargets() map[string]interface{} {
 	return result
 }
 
+// SyncCh is the channel for synchronization
 func (m *Manager) SyncCh() <-chan map[string]interface{} {
 	return m.syncCh
 }

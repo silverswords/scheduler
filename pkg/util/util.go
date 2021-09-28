@@ -2,19 +2,16 @@ package util
 
 import (
 	"errors"
-	"time"
 
 	"github.com/spf13/viper"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
-
-var globalEtcdClient *clientv3.Client
 
 var (
 	errNoEndpoints   = errors.New("can't find endpoints in config file")
 	errWrongEndpoint = errors.New("wrong endpoint")
 )
 
+// GetEndpoints gets endpoints configuration in viper
 func GetEndpoints() ([]string, error) {
 	endpoints, ok := viper.Get("endpoints").([]interface{})
 	if !ok {
@@ -34,23 +31,32 @@ func GetEndpoints() ([]string, error) {
 	return eps, nil
 }
 
-func GetEtcdClient() (*clientv3.Client, error) {
-	if globalEtcdClient != nil {
-		return globalEtcdClient, nil
+// GetTaskDispatchPrefix gets the key prefix of config discover
+func GetConfigPrefix() (string, error) {
+	prefix, ok := viper.Get("prefix.config").(string)
+	if !ok {
+		return "", errors.New("can't find prefix.config in config file")
 	}
 
-	endpoints, err := GetEndpoints()
-	if err != nil {
-		return nil, err
+	return prefix, nil
+}
+
+// GetTaskDispatchPrefix gets the key prefix of worker discover
+func GetWorkerDiscoverPrefix() (string, error) {
+	prefix, ok := viper.Get("prefix.worker").(string)
+	if !ok {
+		return "", errors.New("can't find prefix.worker in config file")
 	}
 
-	globalEtcdClient, err = clientv3.New(clientv3.Config{
-		Endpoints:   endpoints,
-		DialTimeout: 5 * time.Second,
-	})
-	if err != nil {
-		return nil, err
+	return prefix, nil
+}
+
+// GetTaskDispatchPrefix gets the key prefix of task dispatch and task receive
+func GetTaskDispatchPrefix() (string, error) {
+	prefix, ok := viper.Get("prefix.task").(string)
+	if !ok {
+		return "", errors.New("can't find prefix.task in config file")
 	}
 
-	return globalEtcdClient, nil
+	return prefix, nil
 }

@@ -27,6 +27,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.nimitz)")
 }
 
+// Execute -
 func Execute() error {
 	return rootCmd.Execute()
 }

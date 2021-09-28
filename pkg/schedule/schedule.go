@@ -6,6 +6,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
+// Schedule determines when to execute the task
 type Schedule interface {
 	Name() string
 	Next() time.Time
@@ -13,6 +14,7 @@ type Schedule interface {
 	Kind() string
 }
 
+// PrioritySchedule provides priority on schedule
 type PrioritySchedule interface {
 	Schedule
 	Priority() int
@@ -23,6 +25,7 @@ type prioritySchedule struct {
 	priority int
 }
 
+// NewPrioritySchedule creates an instance of PrioritySchedule
 func NewPrioritySchedule(schedule Schedule, priority int) PrioritySchedule {
 	return &prioritySchedule{
 		schedule,
@@ -30,8 +33,14 @@ func NewPrioritySchedule(schedule Schedule, priority int) PrioritySchedule {
 	}
 }
 
+// Priority returns the task priority
 func (s *prioritySchedule) Priority() int {
 	return s.priority
+}
+
+// Kind returns the kind of schedule
+func (s *prioritySchedule) Kind() string {
+	return "priority(" + s.Schedule.Kind() + ")"
 }
 
 var standardParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
@@ -41,9 +50,9 @@ type cronSchedule struct {
 	s    cron.Schedule
 	next time.Time
 	prev time.Time
-	kind string
 }
 
+// NewCronSchedule creates cron scheduling unit
 func NewCronSchedule(name, cronStr string) (Schedule, error) {
 	s, err := standardParser.Parse(cronStr)
 	if err != nil {
@@ -53,14 +62,15 @@ func NewCronSchedule(name, cronStr string) (Schedule, error) {
 	return &cronSchedule{
 		name: name,
 		s:    s,
-		kind: "cron",
 	}, nil
 }
 
+// Name returns the name of the task
 func (s *cronSchedule) Name() string {
 	return s.name
 }
 
+// Next returns the time of the next execution of the task
 func (s *cronSchedule) Next() time.Time {
 	if s.next.IsZero() {
 		s.next = s.s.Next(time.Now())
@@ -69,13 +79,15 @@ func (s *cronSchedule) Next() time.Time {
 	return s.next
 }
 
+// Step markes the end of this execution and enter the next
 func (s *cronSchedule) Step() {
 	s.prev = s.next
 	s.next = s.s.Next(s.prev)
 }
 
+// Kind returns the kind of schedule
 func (s *cronSchedule) Kind() string {
-	return s.kind
+	return "cron"
 }
 
 type ByTime []Schedule
@@ -95,25 +107,29 @@ func (s ByTime) Less(i, j int) bool {
 type onceSchedule struct {
 	name string
 	next time.Time
-	kind string
 }
 
+// NewOnceSchedule creates once scheduling unit
 func NewOnceSchedule(name string) Schedule {
-	return &onceSchedule{name: name, next: time.Now(), kind: "once"}
+	return &onceSchedule{name: name, next: time.Now()}
 }
 
+// Name returns the name of the task
 func (o *onceSchedule) Name() string {
 	return o.name
 }
 
+// Next returns the time of the next execution of the task
 func (o *onceSchedule) Next() time.Time {
 	return o.next
 }
 
+// Step markes the end of this execution and enter the next
 func (o *onceSchedule) Step() {
 	o.next = time.Time{}
 }
 
+// Kind returns the kind of schedule
 func (s *onceSchedule) Kind() string {
-	return s.kind
+	return "once"
 }
