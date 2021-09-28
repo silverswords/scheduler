@@ -14,6 +14,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
+// Pool is the core of the scheduler
 type Pool struct {
 	mu      sync.Mutex
 	rwMutex sync.RWMutex
@@ -34,6 +35,7 @@ type Pool struct {
 	workers map[string]bool
 }
 
+// New creates a pool
 func New() *Pool {
 	queue := NewQueue()
 	queue.SetCompareFunc( // CompareByPriority is the Less function used priority
@@ -51,6 +53,7 @@ func New() *Pool {
 	}
 }
 
+// Run -
 func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
 	p.isRunning = true
 	go p.reload()
@@ -135,7 +138,7 @@ func (p *Pool) reloader(configs <-chan map[string]interface{}) {
 				newConfigs[k] = v.(config.Config)
 			}
 
-			p.SetConfig(newConfigs)
+			p.setConfig(newConfigs)
 			select {
 			case p.triggerReload <- struct{}{}:
 			default:
@@ -147,7 +150,7 @@ func (p *Pool) reloader(configs <-chan map[string]interface{}) {
 	}
 }
 
-func (p *Pool) SetConfig(configs map[string]config.Config) {
+func (p *Pool) setConfig(configs map[string]config.Config) {
 	p.mu.Lock()
 	p.oldConfigs, p.configs = p.configs, configs
 	p.mu.Unlock()
