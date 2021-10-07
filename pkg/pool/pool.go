@@ -11,6 +11,7 @@ import (
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
+	"github.com/silverswords/scheduler/pkg/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -217,6 +218,11 @@ func (p *Pool) caculateTimer() *time.Timer {
 }
 
 func (p *Pool) dispatcher(client *clientv3.Client) {
+	prefix, err := util.GetTaskDispatchPrefix()
+	if err != nil {
+		panic(err)
+	}
+
 	for {
 		task := p.queue.Get().(*task.RemoteTask)
 		value, err := task.Encode()
@@ -237,7 +243,7 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 
 		for k, v := range p.workers {
 			if v {
-				key := "worker/" + k + "/" + task.Name + time.Now().Format(time.RFC3339)
+				key := prefix + k + "/" + task.Name + time.Now().Format(time.RFC3339)
 				if _, err := client.Put(context.Background(), key, string(value)); err != nil {
 					log.Println("deliver task fail:", err)
 					continue

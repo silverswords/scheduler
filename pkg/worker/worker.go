@@ -29,7 +29,7 @@ func New(name string) *Worker {
 // etcd, and monitors the tasks under `worker/worker-name`
 func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 	lease := clientv3.NewLease(client)
-	leaseResponse, err := lease.Grant(ctx, 10)
+	leaseResponse, err := lease.Grant(ctx, 100)
 	if err != nil {
 		return err
 	}
@@ -70,7 +70,7 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 				log.Println("watch channel closed")
 				return errors.New("watch channel closed")
 			}
-
+			fmt.Println(response)
 			for _, event := range response.Events {
 				remoteTask, err := UnmarshalRemoteTask(ctx, client, event.Kv.Value)
 				if err != nil {
@@ -103,10 +103,15 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 // UnmarshalRemoteTask parses the remoteTask from the byte slice,
 // gets configuration information from etcd, and generates the task.
 func UnmarshalRemoteTask(ctx context.Context, client *clientv3.Client, value []byte) (*task.RemoteTask, error) {
+	prefix, err := util.GetConfigPrefix()
+	if err != nil {
+		return nil, err
+	}
+
 	var remoteTask task.RemoteTask
 	remoteTask.Decode(value)
 
-	res, err := client.Get(ctx, "config/"+remoteTask.Name, clientv3.WithFirstKey()...)
+	res, err := client.Get(ctx, prefix+remoteTask.Name, clientv3.WithFirstKey()...)
 	if err != nil {
 		log.Printf("Can't get config: %s\n", err)
 	}
