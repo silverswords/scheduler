@@ -14,35 +14,6 @@ type Schedule interface {
 	Kind() string
 }
 
-// PrioritySchedule provides priority on schedule
-type PrioritySchedule interface {
-	Schedule
-	Priority() int
-}
-
-type prioritySchedule struct {
-	Schedule
-	priority int
-}
-
-// NewPrioritySchedule creates an instance of PrioritySchedule
-func NewPrioritySchedule(schedule Schedule, priority int) PrioritySchedule {
-	return &prioritySchedule{
-		schedule,
-		priority,
-	}
-}
-
-// Priority returns the task priority
-func (s *prioritySchedule) Priority() int {
-	return s.priority
-}
-
-// Kind returns the kind of schedule
-func (s *prioritySchedule) Kind() string {
-	return "priority(" + s.Schedule.Kind() + ")"
-}
-
 var standardParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 
 type cronSchedule struct {

@@ -3,6 +3,8 @@ schedule:
   type: cron
   cron: "*/1 * * * *"
   priority: 5
+  lables:
+    - linux
 jobs:
   env:
     TASKTYPE: shell

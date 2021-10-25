@@ -32,7 +32,7 @@ type Pool struct {
 	triggerReload chan struct{}
 	syncCh        chan struct{}
 
-	workers map[string]bool
+	workers map[string]map[string]bool
 }
 
 // New creates a pool
@@ -49,7 +49,7 @@ func New() *Pool {
 		stop:          make(<-chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
-		workers:       make(map[string]bool),
+		workers:       make(map[string]map[string]bool),
 	}
 }
 
@@ -65,15 +65,7 @@ func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{
 		select {
 		case <-timer.C:
 			sche := p.schedules[0]
-			// log.Println(p.workers)
-			t := &task.RemoteTask{
-				Name:      sche.Name(),
-				StartTime: sche.Next(),
-			}
-
-			if s, ok := sche.(schedule.PrioritySchedule); ok {
-				t.Priority = s.Priority()
-			}
+			t := p.configs[sche.Name()].NewRemoteTask(sche)
 
 			p.queue.Add(t)
 			sche.Step()
@@ -112,13 +104,15 @@ func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{
 
 		case newWorkers := <-workers:
 			p.rwMutex.Lock()
+			new := make(map[string]map[string]bool)
 			for k, v := range newWorkers {
-				if v != "online" {
-					delete(p.workers, k)
-				} else {
-					p.workers[k] = true
+				new[k] = make(map[string]bool)
+				for _, lable := range v.([]string) {
+					new[k][lable] = true
 				}
 			}
+
+			p.workers = new
 			log.Println("new workers", newWorkers)
 			log.Printf("update worker list: %v", p.workers)
 			p.rwMutex.Unlock()
@@ -229,57 +223,75 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 			log.Println(err)
 			continue
 		}
-
-		if len(p.workers) == 0 {
+		p.rwMutex.RLock()
+		workers := filterWokers(task.Lables, p.workers)
+		p.rwMutex.RUnlock()
+		if len(workers) == 0 {
 			log.Println("task scheduling failed, no worker is running")
 			p.queue.Done(task)
 			p.queue.Add(task)
 
-			for len(p.workers) == 0 {
+			for len(workers) == 0 {
 			}
 			continue
 		}
 
-		for k, v := range p.workers {
-			if v {
-				key := prefix + k + "/" + task.Name + time.Now().Format(time.RFC3339)
-				if _, err := client.Put(context.Background(), key, string(value)); err != nil {
-					log.Println("deliver task fail:", err)
-					continue
-				}
-				log.Printf("deliver task success, worker: %s, task: %s", k, task.Name)
-				go func() {
-					watchChan := client.Watch(context.Background(), key)
-				watch:
-					events, ok := <-watchChan
-					if !ok {
-						log.Printf("watch task %s channel has closed", task.Name)
-						return
-					}
-
-					for _, event := range events.Events {
-						err := task.Decode(event.Kv.Value)
-						if err != nil {
-							log.Printf("can't unmarshal task, err:%s\n", err)
-							continue
-						}
-
-						if !task.Done {
-							goto watch
-						}
-						p.queue.Done(task)
-						if task.Err != nil {
-							log.Printf("task run fail, error: %s\n", task.Err)
-							task.Done, task.Err = false, nil
-							p.queue.Add(task)
-						}
-
-						log.Printf("task %s run success\n", task.Name)
-					}
-				}()
-				break
+		for _, worker := range workers {
+			key := prefix + worker + "/" + task.Name + time.Now().Format(time.RFC3339)
+			if _, err := client.Put(context.Background(), key, string(value)); err != nil {
+				log.Println("deliver task fail:", err)
+				continue
 			}
+			log.Printf("deliver task success, worker: %s, task: %s", worker, task.Name)
+			go func() {
+				watchChan := client.Watch(context.Background(), key)
+			watch:
+				events, ok := <-watchChan
+				if !ok {
+					log.Printf("watch task %s channel has closed", task.Name)
+					return
+				}
+
+				for _, event := range events.Events {
+					err := task.Decode(event.Kv.Value)
+					if err != nil {
+						log.Printf("can't unmarshal task, err:%s\n", err)
+						continue
+					}
+
+					if !task.Done {
+						goto watch
+					}
+					p.queue.Done(task)
+					if task.Err != nil {
+						log.Printf("task run fail, error: %s\n", task.Err)
+						task.Done, task.Err = false, nil
+						p.queue.Add(task)
+					}
+
+					log.Printf("task %s run success\n", task.Name)
+				}
+			}()
+			break
 		}
 	}
 
+}
+
+func filterWokers(lables []string, worker map[string]map[string]bool) []string {
+	result := []string{}
+	for k, v := range worker {
+		flag := true
+		for _, lable := range lables {
+			if !v[lable] {
+				flag = false
+				break
+			}
+		}
+		if flag {
+			result = append(result, k)
+		}
+	}
+
+	return result
 }

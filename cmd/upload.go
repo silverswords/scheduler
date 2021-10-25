@@ -3,9 +3,9 @@ package cmd
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -95,7 +95,7 @@ func uploadFile(url, fileKey, filePath string) error {
 		return err
 	}
 
-	fmt.Println(string(b))
+	log.Println(string(b))
 
 	return nil
 }

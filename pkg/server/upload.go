@@ -130,7 +130,7 @@ func (m *Manager) upload(c *gin.Context) {
 	minioManager := model.NewMinioManager()
 	err = minioManager.Connect(endpoint, userName, password)
 	if err != nil {
-		fmt.Printf("connect minio failed: %s", err.Error())
+		log.Printf("connect minio failed: %s", err.Error())
 		c.String(http.StatusBadGateway, fmt.Sprintf("status: %d", http.StatusBadGateway))
 		return
 	}
@@ -162,7 +162,7 @@ func (m *Manager) upload(c *gin.Context) {
 
 		err = os.RemoveAll(localStorageDir + "/" + file.Filename)
 		if err != nil {
-			fmt.Printf("delete local file failed: %s\n", err.Error())
+			log.Printf("delete local file failed: %s\n", err.Error())
 		}
 	}
 

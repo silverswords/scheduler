@@ -24,6 +24,7 @@ var (
 type Config interface {
 	IsSame(Config) (bool, error)
 	NewTask() (string, task.Task)
+	NewRemoteTask(s schedule.Schedule) task.Task
 	NewSchedule() (schedule.Schedule, error)
 }
 
@@ -37,6 +38,7 @@ type Schedule struct {
 	Cron     string
 	Type     string
 	Priority int
+	Lables   []string
 }
 
 func (s Schedule) IsEmapty() bool {
@@ -93,6 +95,15 @@ func (c *config) NewTask() (string, task.Task) {
 	})
 }
 
+func (c *config) NewRemoteTask(s schedule.Schedule) task.Task {
+	return &task.RemoteTask{
+		Name:      c.Name,
+		StartTime: s.Next(),
+		Priority:  c.Schedule.Priority,
+		Lables:    c.Schedule.Lables,
+	}
+}
+
 func (c *config) NewSchedule() (s schedule.Schedule, err error) {
 	switch c.Schedule.Type {
 	case "once":
@@ -104,10 +115,6 @@ func (c *config) NewSchedule() (s schedule.Schedule, err error) {
 		}
 	default:
 		return nil, errors.New("error schedule type")
-	}
-
-	if c.Schedule.Priority != 0 {
-		s = schedule.NewPrioritySchedule(s, c.Schedule.Priority)
 	}
 
 	return

@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
@@ -11,18 +10,45 @@ import (
 	"github.com/silverswords/scheduler/pkg/task"
 	"github.com/silverswords/scheduler/pkg/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"gopkg.in/yaml.v2"
 )
+
+type WorkerConfig struct {
+	Name   string
+	Lables []string
+}
+
+func Unmarshal(data []byte) (*WorkerConfig, error) {
+	c := &WorkerConfig{}
+
+	if err := yaml.Unmarshal(data, c); err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func Marshal(c *WorkerConfig) ([]byte, error) {
+	return yaml.Marshal(c)
+}
 
 // Worker is what the task actually handles
 type Worker struct {
-	name string
+	name   string
+	config string
 }
 
 // New create a new worker
-func New(name string) *Worker {
-	return &Worker{
-		name: name,
+func New(config *WorkerConfig) (*Worker, error) {
+	configBytes, err := Marshal(config)
+	if err != nil {
+		return nil, err
 	}
+
+	return &Worker{
+		name:   config.Name,
+		config: string(configBytes),
+	}, nil
 }
 
 // Run starts to run the worker, registers itself under `workers` of
@@ -44,7 +70,7 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 		return err
 	}
 
-	_, err = client.Put(ctx, workerPrefix+w.name, "online", clientv3.WithLease(leaseResponse.ID))
+	_, err = client.Put(ctx, workerPrefix+w.name, w.config, clientv3.WithLease(leaseResponse.ID))
 	if err != nil {
 		return err
 	}
@@ -55,7 +81,7 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 
 	go func() {
 		for keepResp := range leaseKeepAliveResponse {
-			fmt.Printf("renew a contract success, Id:%d, TTL:%d, time:%v\n", keepResp.ID, keepResp.TTL, time.Now())
+			log.Printf("renew a contract success, Id:%d, TTL:%d, time:%v\n", keepResp.ID, keepResp.TTL, time.Now())
 		}
 	}()
 
@@ -70,7 +96,7 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 				log.Println("watch channel closed")
 				return errors.New("watch channel closed")
 			}
-			fmt.Println(response)
+
 			for _, event := range response.Events {
 				remoteTask, err := UnmarshalRemoteTask(ctx, client, event.Kv.Value)
 				if err != nil {

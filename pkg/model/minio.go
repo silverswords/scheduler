@@ -52,7 +52,7 @@ func (m *Manager) Upload(ctx context.Context, bucketName, location, filePath, fi
 		// Check to see if we already own this bucket (which happens if you run this twice)
 		exists, errBucketExists := m.minioClient.BucketExists(ctx, bucketName)
 		if errBucketExists == nil && exists {
-			fmt.Printf("We already own %s\n", bucketName)
+			log.Printf("We already own %s\n", bucketName)
 			return nil
 		} else {
 			return fmt.Errorf("create bucket failed: %s\n", err.Error())

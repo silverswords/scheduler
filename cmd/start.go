@@ -12,6 +12,7 @@ import (
 	scheduler "github.com/silverswords/scheduler/pkg/pool"
 	"github.com/silverswords/scheduler/pkg/server"
 	"github.com/silverswords/scheduler/pkg/util"
+	"github.com/silverswords/scheduler/pkg/worker"
 )
 
 func init() {
@@ -50,7 +51,11 @@ var startCmd = &cobra.Command{
 		})
 
 		workerDiscover := discover.NewManger(workerPrefix, func(value []byte) (interface{}, error) {
-			return string(value), nil
+			config, err := worker.Unmarshal(value)
+			if err != nil {
+				return nil, err
+			}
+			return config.Lables, nil
 		})
 
 		go configDiscover.Run(context.Background(), client)

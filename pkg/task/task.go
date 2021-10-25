@@ -33,8 +33,8 @@ type RemoteTask struct {
 	Err       error     `json:"err,omitempty"`
 	Done      bool      `json:"done,omitempty"`
 	Priority  int
-
-	t Task
+	Lables    []string
+	t         Task
 }
 
 // Do executes remoteTask and markes it as execution complete
