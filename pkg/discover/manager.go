@@ -78,7 +78,7 @@ func (m *Manager) Run(ctx context.Context, client *clientv3.Client) {
 			m.mtx.Lock()
 			for _, event := range response.Events {
 				if event.Type == mvccpb.DELETE {
-					m.targets[strings.TrimPrefix(string(event.Kv.Key), m.watchKey)] = "offline"
+					delete(m.targets, strings.TrimPrefix(string(event.Kv.Key), m.watchKey))
 					continue
 				}
 				t, err := m.f(event.Kv.Value)

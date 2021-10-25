@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sort"
 	"sync"
@@ -66,7 +65,7 @@ func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{
 		select {
 		case <-timer.C:
 			sche := p.schedules[0]
-			fmt.Println(p.workers)
+			// log.Println(p.workers)
 			t := &task.RemoteTask{
 				Name:      sche.Name(),
 				StartTime: sche.Next(),
@@ -120,7 +119,7 @@ func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{
 					p.workers[k] = true
 				}
 			}
-
+			log.Println("new workers", newWorkers)
 			log.Printf("update worker list: %v", p.workers)
 			p.rwMutex.Unlock()
 

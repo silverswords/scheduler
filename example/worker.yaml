@@ -1,0 +1,5 @@
+name: worker1
+lables: 
+  - go
+  - nodejs
+  - linux
