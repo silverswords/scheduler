@@ -209,6 +209,11 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 	}
 
 	for {
+		for len(p.workers) == 0 {
+			time.Sleep(5 * time.Second)
+			log.Println("block for empty workers")
+		}
+
 		task := p.queue.Get().(*task.RemoteTask)
 		value, err := task.Encode()
 		if err != nil {
@@ -222,9 +227,6 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 			log.Println("task scheduling failed, no worker who meet the labels is running")
 			p.queue.Done(task)
 			p.queue.Add(task)
-
-			for len(workers) == 0 {
-			}
 			continue
 		}
 
