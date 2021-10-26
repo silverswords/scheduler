@@ -61,18 +61,47 @@ func (s *cronSchedule) Kind() string {
 	return "cron"
 }
 
-type ByTime []Schedule
+type HeapSet struct {
+	schedules []Schedule
+	m         map[string]int
+}
 
-func (s ByTime) Len() int      { return len(s) }
-func (s ByTime) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-func (s ByTime) Less(i, j int) bool {
-	if s[i].Next().IsZero() {
+func NewHeapSet() *HeapSet {
+	return &HeapSet{
+		schedules: make([]Schedule, 0),
+		m:         make(map[string]int),
+	}
+}
+
+func (s *HeapSet) Len() int { return len(s.schedules) }
+
+func (s *HeapSet) Swap(i, j int) {
+	s.schedules[i], s.schedules[j] = s.schedules[j], s.schedules[i]
+	s.m[s.schedules[i].Name()], s.m[s.schedules[j].Name()] = s.m[s.schedules[j].Name()], s.m[s.schedules[i].Name()]
+}
+
+func (s *HeapSet) Less(i, j int) bool {
+	if s.schedules[i].Next().IsZero() {
 		return false
 	}
-	if s[j].Next().IsZero() {
+	if s.schedules[j].Next().IsZero() {
 		return true
 	}
-	return s[i].Next().Before(s[j].Next())
+	return s.schedules[i].Next().Before(s.schedules[j].Next())
+}
+
+func (s *HeapSet) First() Schedule {
+	return s.schedules[0]
+}
+
+func (s *HeapSet) Add(schedule Schedule) {
+	if i, ok := s.m[schedule.Name()]; ok {
+		s.schedules = append(s.schedules[0:i], s.schedules[i+1:len(s.schedules)]...)
+		delete(s.m, schedule.Name())
+	}
+
+	s.schedules = append(s.schedules, schedule)
+	s.m[schedule.Name()] = len(s.schedules) - 1
 }
 
 type onceSchedule struct {

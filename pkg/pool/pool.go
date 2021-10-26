@@ -16,14 +16,13 @@ import (
 
 // Pool is the core of the scheduler
 type Pool struct {
-	mu      sync.Mutex
-	rwMutex sync.RWMutex
+	mu sync.RWMutex
 
 	queue Queue
 
 	// once      sync.Once
-	stop      <-chan struct{}
-	schedules []schedule.Schedule
+	stop        chan struct{}
+	scheduleSet *schedule.HeapSet
 
 	isRunning bool
 
@@ -45,8 +44,9 @@ func New() *Pool {
 	)
 
 	return &Pool{
+		scheduleSet:   schedule.NewHeapSet(),
 		queue:         queue,
-		stop:          make(<-chan struct{}),
+		stop:          make(chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
 		workers:       make(map[string]map[string]bool),
@@ -56,76 +56,49 @@ func New() *Pool {
 // Run -
 func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
 	p.isRunning = true
-	go p.reload()
-	go p.reloader(configs)
+	go p.reloader()
 	go p.dispatcher(client)
 
 	timer := p.caculateTimer()
 	for {
 		select {
 		case <-timer.C:
-			sche := p.schedules[0]
+			sche := p.scheduleSet.First()
 			t := p.configs[sche.Name()].NewRemoteTask(sche)
 
 			p.queue.Add(t)
 			sche.Step()
-			timer = p.caculateTimer()
 			p.mu.Lock()
-			nextSche := p.schedules[0]
+			timer = p.caculateTimer()
+			nextSche := p.scheduleSet.First()
 
 			if time.Until(nextSche.Next()).Hours() < -10000 {
 				log.Println("all task have been completed")
-				continue
-			}
-
-			if nextSche.Kind() == "once" {
+			} else if nextSche.Kind() == "once" {
 				log.Printf("recaculate timer, next task is %s, next run right now\n", nextSche.Name())
-				continue
+			} else {
+				log.Printf("recaculate timer, next task is %s, next run after %s\n", nextSche.Name(), time.Until(nextSche.Next()))
 			}
 
-			log.Printf("recaculate timer, next task is %s, next run after %s\n", nextSche.Name(), time.Until(nextSche.Next()))
 			p.mu.Unlock()
 
 		case <-p.syncCh:
-			timer = p.caculateTimer()
 			p.mu.Lock()
-			if len(p.schedules) == 0 {
+			timer = p.caculateTimer()
+			if p.scheduleSet.Len() == 0 {
+				p.mu.Unlock()
 				continue
 			}
-			sche := p.schedules[0]
+
+			sche := p.scheduleSet.First()
 			p.mu.Unlock()
 
 			if sche.Kind() == "once" {
 				log.Printf("recaculate timer, next task is %s, next run right now\n%v\n", sche.Name(), timer)
-				continue
+			} else {
+				log.Printf("recaculate timer, next task is %s, next run after %s\n", sche.Name(), time.Until(sche.Next()))
 			}
 
-			log.Printf("recaculate timer, next task is %s, next run after %s\n", sche.Name(), time.Until(sche.Next()))
-
-		case newWorkers := <-workers:
-			p.rwMutex.Lock()
-			new := make(map[string]map[string]bool)
-			for k, v := range newWorkers {
-				new[k] = make(map[string]bool)
-				for _, lable := range v.([]string) {
-					new[k][lable] = true
-				}
-			}
-
-			p.workers = new
-			log.Println("new workers", newWorkers)
-			log.Printf("update worker list: %v", p.workers)
-			p.rwMutex.Unlock()
-
-		case <-p.stop:
-			return
-		}
-	}
-}
-
-func (p *Pool) reloader(configs <-chan map[string]interface{}) {
-	for {
-		select {
 		case new := <-configs:
 			newConfigs := make(map[string]config.Config)
 			for k, v := range new {
@@ -137,6 +110,20 @@ func (p *Pool) reloader(configs <-chan map[string]interface{}) {
 			case p.triggerReload <- struct{}{}:
 			default:
 			}
+
+		case newWorkers := <-workers:
+			p.mu.Lock()
+			new := make(map[string]map[string]bool)
+			for k, v := range newWorkers {
+				new[k] = make(map[string]bool)
+				for _, lable := range v.([]string) {
+					new[k][lable] = true
+				}
+			}
+
+			p.workers = new
+			log.Printf("update worker list: %v", p.workers)
+			p.mu.Unlock()
 
 		case <-p.stop:
 			return
@@ -150,7 +137,7 @@ func (p *Pool) setConfig(configs map[string]config.Config) {
 	p.mu.Unlock()
 }
 
-func (p *Pool) reload() {
+func (p *Pool) reloader() {
 	ticker := time.NewTicker(5 * time.Second)
 
 	for {
@@ -158,7 +145,7 @@ func (p *Pool) reload() {
 		case <-ticker.C:
 			select {
 			case <-p.triggerReload:
-				p.sync()
+				p.reload()
 			case <-p.stop:
 				ticker.Stop()
 				return
@@ -171,7 +158,7 @@ func (p *Pool) reload() {
 	}
 }
 
-func (p *Pool) sync() {
+func (p *Pool) reload() {
 	p.mu.Lock()
 	for key, config := range p.configs {
 		if oldConfig, ok := p.oldConfigs[key]; ok {
@@ -185,7 +172,7 @@ func (p *Pool) sync() {
 				continue
 			}
 
-			log.Printf("%s config update: \n	old: %v\n	new: %v\n", key, oldConfig, config)
+			log.Printf("%s config update:\nold: %v\nnew: %v\n", key, oldConfig, config)
 		}
 
 		schedule, err := config.NewSchedule()
@@ -193,7 +180,8 @@ func (p *Pool) sync() {
 			log.Println(err)
 			continue
 		}
-		p.schedules = append(p.schedules, schedule)
+
+		p.scheduleSet.Add(schedule)
 	}
 
 	p.mu.Unlock()
@@ -201,13 +189,17 @@ func (p *Pool) sync() {
 }
 
 func (p *Pool) caculateTimer() *time.Timer {
-	sort.Sort(schedule.ByTime(p.schedules))
+	sort.Sort(p.scheduleSet)
 
-	if len(p.schedules) == 0 || p.schedules[0].Next().IsZero() {
+	if p.scheduleSet.Len() == 0 || p.scheduleSet.First().Next().IsZero() {
 		return time.NewTimer(1000000 * time.Hour)
 	} else {
-		return time.NewTimer(time.Until(p.schedules[0].Next()))
+		return time.NewTimer(time.Until(p.scheduleSet.First().Next()))
 	}
+}
+
+func (p *Pool) Stop() {
+	close(p.stop)
 }
 
 func (p *Pool) dispatcher(client *clientv3.Client) {
@@ -223,11 +215,11 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 			log.Println(err)
 			continue
 		}
-		p.rwMutex.RLock()
+		p.mu.RLock()
 		workers := filterWokers(task.Lables, p.workers)
-		p.rwMutex.RUnlock()
+		p.mu.RUnlock()
 		if len(workers) == 0 {
-			log.Println("task scheduling failed, no worker is running")
+			log.Println("task scheduling failed, no worker who meet the labels is running")
 			p.queue.Done(task)
 			p.queue.Add(task)
 

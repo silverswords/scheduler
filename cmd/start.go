@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -9,7 +10,7 @@ import (
 
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/discover"
-	scheduler "github.com/silverswords/scheduler/pkg/pool"
+	"github.com/silverswords/scheduler/pkg/pool"
 	"github.com/silverswords/scheduler/pkg/server"
 	"github.com/silverswords/scheduler/pkg/util"
 	"github.com/silverswords/scheduler/pkg/worker"
@@ -57,13 +58,37 @@ var startCmd = &cobra.Command{
 			}
 			return config.Lables, nil
 		})
+		var g util.Group
+		scheduler := pool.New()
+		configContext, configCancleFunc := context.WithCancel(context.Background())
+		workerContext, workerCancleFunc := context.WithCancel(context.Background())
 
-		go configDiscover.Run(context.Background(), client)
-		go workerDiscover.Run(context.Background(), client)
+		g.Add(func() error {
+			return configDiscover.Run(configContext, client)
+		}, func(err error) {
+			log.Printf("config discover: %s\n", err)
+			configCancleFunc()
+		})
 
-		go server.ListenAndServe()
+		g.Add(func() error {
+			return workerDiscover.Run(workerContext, client)
+		}, func(err error) {
+			log.Printf("worker discover: %s\n", err)
+			workerCancleFunc()
+		})
 
-		scheduler.New().Run(client, configDiscover.SyncCh(), workerDiscover.SyncCh())
-		return nil
+		g.Add(func() error {
+			server.ListenAndServe()
+			return nil
+		}, func(err error) {})
+
+		g.Add(func() error {
+			scheduler.Run(client, configDiscover.SyncCh(), workerDiscover.SyncCh())
+			return nil
+		}, func(err error) {
+			scheduler.Stop()
+		})
+
+		return g.Run()
 	},
 }

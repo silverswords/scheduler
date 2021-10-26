@@ -2,6 +2,7 @@ package discover
 
 import (
 	"context"
+	"errors"
 
 	"log"
 	"strings"
@@ -40,12 +41,12 @@ func NewManger(watchKey string, f func([]byte) (interface{}, error)) *Manager {
 }
 
 // Run lets the manager start watching
-func (m *Manager) Run(ctx context.Context, client *clientv3.Client) {
+func (m *Manager) Run(ctx context.Context, client *clientv3.Client) error {
 	go m.sender(ctx)
 	response, err := client.Get(ctx, m.watchKey, clientv3.WithPrefix())
 	if err != nil {
 		log.Printf("fail get init value: %s\n", err)
-		return
+		return err
 	}
 	m.mtx.Lock()
 
@@ -67,12 +68,11 @@ func (m *Manager) Run(ctx context.Context, client *clientv3.Client) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 
 		case response, ok := <-watchChan:
 			if !ok {
-				log.Println("Discoverer channel closed")
-				return
+				return errors.New(m.watchKey + "discoverer channel closed")
 			}
 
 			m.mtx.Lock()
@@ -112,7 +112,7 @@ func (m *Manager) sender(ctx context.Context) {
 				select {
 				case m.syncCh <- m.allTargets():
 				default:
-					log.Println("Discovery receiver's channel was full so will retry the next cycle")
+					log.Println(m.watchKey + " discovery receiver's channel was full so will retry the next cycle")
 					select {
 					case m.triggerSend <- struct{}{}:
 					default:
