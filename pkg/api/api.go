@@ -118,7 +118,7 @@ func (c *Client) ListTasks(ctx context.Context) error {
 }
 
 func (c *Client) ListWorkers(ctx context.Context) error {
-	resp, err := c.etcdClient.Get(ctx, c.configPrefix, clientv3.WithPrefix())
+	resp, err := c.etcdClient.Get(ctx, c.workerPrefix, clientv3.WithPrefix())
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,7 @@ func (c *Client) DeliverTask(ctx context.Context, worker string, task *task.Remo
 	return key, nil
 }
 
-func (c *Client) WatchTaskUpdate(ctx context.Context, key string) clientv3.WatchChan {
-	ch := c.etcdClient.Watch(ctx, key)
+func (c *Client) Watch(ctx context.Context, key string) clientv3.WatchChan {
+	ch := c.etcdClient.Watch(ctx, key, clientv3.WithPrefix())
 	return ch
 }

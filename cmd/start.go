@@ -38,7 +38,7 @@ var startCmd = &cobra.Command{
 			return err
 		}
 
-		taskPrefix, err := util.GetWorkerDiscoverPrefix()
+		taskPrefix, err := util.GetTaskDispatchPrefix()
 		if err != nil {
 			return err
 		}

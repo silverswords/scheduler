@@ -228,7 +228,7 @@ func (p *Pool) dispatcher(client *api.Client) {
 
 			log.Printf("deliver task success, worker: %s, task: %s", worker, task.Name)
 			go func() {
-				watchChan := client.WatchTaskUpdate(context.Background(), key)
+				watchChan := client.Watch(context.Background(), key)
 			watch:
 				events, ok := <-watchChan
 				if !ok {
