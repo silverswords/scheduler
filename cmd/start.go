@@ -3,11 +3,10 @@ package cmd
 import (
 	"context"
 	"log"
-	"time"
 
 	"github.com/spf13/cobra"
-	clientv3 "go.etcd.io/etcd/client/v3"
 
+	"github.com/silverswords/scheduler/pkg/api"
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/discover"
 	"github.com/silverswords/scheduler/pkg/pool"
@@ -29,20 +28,22 @@ var startCmd = &cobra.Command{
 			return err
 		}
 
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   endpoints,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
-
 		configPrefix, err := util.GetConfigPrefix()
 		if err != nil {
 			return err
 		}
 
 		workerPrefix, err := util.GetWorkerDiscoverPrefix()
+		if err != nil {
+			return err
+		}
+
+		taskPrefix, err := util.GetWorkerDiscoverPrefix()
+		if err != nil {
+			return err
+		}
+
+		client, err := api.NewClient(endpoints, configPrefix, taskPrefix, workerPrefix)
 		if err != nil {
 			return err
 		}
@@ -64,14 +65,14 @@ var startCmd = &cobra.Command{
 		workerContext, workerCancleFunc := context.WithCancel(context.Background())
 
 		g.Add(func() error {
-			return configDiscover.Run(configContext, client)
+			return configDiscover.Run(configContext, client.GetOriginClient())
 		}, func(err error) {
 			log.Printf("config discover: %s\n", err)
 			configCancleFunc()
 		})
 
 		g.Add(func() error {
-			return workerDiscover.Run(workerContext, client)
+			return workerDiscover.Run(workerContext, client.GetOriginClient())
 		}, func(err error) {
 			log.Printf("worker discover: %s\n", err)
 			workerCancleFunc()

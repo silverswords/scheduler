@@ -74,6 +74,12 @@ func (c *config) NewTask() (string, task.Task) {
 		var msg string
 		log.Printf("task %s run start\n", c.Name)
 		for _, step := range c.Jobs.Steps {
+			select {
+			case <-ctx.Done():
+				return errors.New("task has be cancled")
+			default:
+			}
+
 			if c.Upload != "" {
 				step.Run = strings.Trim(step.Run, "./")
 				step.Run = strings.ReplaceAll(step.Run, c.Upload, "./files/"+c.Upload)

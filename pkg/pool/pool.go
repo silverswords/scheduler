@@ -7,11 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/silverswords/scheduler/pkg/api"
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
-	"github.com/silverswords/scheduler/pkg/util"
-	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
 // Pool is the core of the scheduler
@@ -54,7 +53,7 @@ func New() *Pool {
 }
 
 // Run -
-func (p *Pool) Run(client *clientv3.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
+func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
 	p.isRunning = true
 	go p.reloader()
 	go p.dispatcher(client)
@@ -202,12 +201,7 @@ func (p *Pool) Stop() {
 	close(p.stop)
 }
 
-func (p *Pool) dispatcher(client *clientv3.Client) {
-	prefix, err := util.GetTaskDispatchPrefix()
-	if err != nil {
-		panic(err)
-	}
-
+func (p *Pool) dispatcher(client *api.Client) {
 	for {
 		for len(p.workers) == 0 {
 			time.Sleep(5 * time.Second)
@@ -215,11 +209,6 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 		}
 
 		task := p.queue.Get().(*task.RemoteTask)
-		value, err := task.Encode()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
 		p.mu.RLock()
 		workers := filterWokers(task.Lables, p.workers)
 		p.mu.RUnlock()
@@ -231,14 +220,15 @@ func (p *Pool) dispatcher(client *clientv3.Client) {
 		}
 
 		for _, worker := range workers {
-			key := prefix + worker + "/" + task.Name + time.Now().Format(time.RFC3339)
-			if _, err := client.Put(context.Background(), key, string(value)); err != nil {
-				log.Println("deliver task fail:", err)
+			key, err := client.DeliverTask(context.Background(), worker, task)
+			if err != nil {
+				log.Println("deliver task failed, error: ", err)
 				continue
 			}
+
 			log.Printf("deliver task success, worker: %s, task: %s", worker, task.Name)
 			go func() {
-				watchChan := client.Watch(context.Background(), key)
+				watchChan := client.WatchTaskUpdate(context.Background(), key)
 			watch:
 				events, ok := <-watchChan
 				if !ok {
