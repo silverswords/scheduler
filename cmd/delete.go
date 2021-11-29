@@ -13,12 +13,12 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(applyCmd)
+	rootCmd.AddCommand(deleteCmd)
 }
 
-var applyCmd = &cobra.Command{
-	Use:   "apply",
-	Short: "apply a config file",
+var deleteCmd = &cobra.Command{
+	Use:   "delete",
+	Short: "delete a config file",
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
 			return errors.New("requires a yaml config")
@@ -44,11 +44,10 @@ var applyCmd = &cobra.Command{
 		}
 
 		body := fmt.Sprintf(`{
-			"key":"%s",
-			"config":"%s"
-			}`, config.Name, string(data))
+			"config_name":"%s"
+			}`, config.Name)
 
-		req, err := http.NewRequest("POST", url+applyPath, bytes.NewBuffer([]byte(body)))
+		req, err := http.NewRequest("POST", url+deletePath, bytes.NewBuffer([]byte(body)))
 		if err != nil {
 			return err
 		}

@@ -28,6 +28,7 @@ type Config struct {
 		Steps []*Step           `yaml:"steps,omitempty"`
 	} `yaml:"jobs,omitempty"`
 
+
 	Upload string `yaml:"upload,omitempty"`
 }
 

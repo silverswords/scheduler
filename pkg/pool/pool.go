@@ -55,7 +55,7 @@ func New() *Pool {
 }
 
 // Run -
-func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
+func (p *Pool) Run(client *api.Client, configs <-chan map[string]config.Config, workers <-chan map[string]interface{}) {
 	p.isRunning = true
 	go p.reloader()
 	go p.dispatcher(client)
@@ -103,7 +103,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, wo
 		case new := <-configs:
 			newConfigs := make(map[string]*config.Config)
 			for k, v := range new {
-				newConfigs[k] = v.(*config.Config)
+				newConfigs[k] = v
 			}
 
 			p.setConfig(newConfigs)
