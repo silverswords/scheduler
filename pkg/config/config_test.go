@@ -21,13 +21,13 @@ func TestUnmarshal(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    *config
+		want    *Config
 		wantErr bool
 	}{
 		{
 			name: "with depends",
 			args: args{data: readFromFile("../../example/depends.yml")},
-			want: &config{
+			want: &Config{
 				Name: "shell_task_cron",
 				Schedule: ScheduleConfig{
 					Cron: "*/1 * * * *",
@@ -35,10 +35,10 @@ func TestUnmarshal(t *testing.T) {
 				},
 				Jobs: struct {
 					Env   map[string]string "yaml:\"env,omitempty\""
-					Steps []Step            "yaml:\"steps,omitempty\""
+					Steps []*Step           "yaml:\"steps,omitempty\""
 				}{
 					Env: map[string]string{"TASKTYPE": "shell", "SCHEDULETYPE": "cron"},
-					Steps: []Step{
+					Steps: []*Step{
 						{
 							Name: "echo-task",
 							Run:  "echo task:$TASKTYPE",
