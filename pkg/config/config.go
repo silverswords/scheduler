@@ -18,7 +18,6 @@ import (
 var (
 	errEmptyName     = errors.New("no name")
 	errEmptySchedule = errors.New("no schedule")
-	errEmptyJobs     = errors.New("no jobs")
 )
 
 type Config interface {
@@ -29,34 +28,31 @@ type Config interface {
 }
 
 type config struct {
-	Name     string
-	Schedule Schedule
-	Jobs     Jobs
-	Upload   string
+	Name     string         `yaml:"name"`
+	Schedule ScheduleConfig `yaml:"schedule"`
+	Jobs     struct {
+		Env   map[string]string `yaml:"env,omitempty"`
+		Steps []Step            `yaml:"steps,omitempty"`
+	} `yaml:"jobs,omitempty"`
+
+	Upload string `yaml:"upload,omitempty"`
 }
-type Schedule struct {
-	Cron     string
-	Type     string
-	Priority int
-	Lables   []string
+type ScheduleConfig struct {
+	Cron     string   `yaml:"cron,omitempty"`
+	Type     string   `yaml:"type,omitempty"`
+	Priority int      `yaml:"priority,omitempty"`
+	Lables   []string `yaml:"lables,omitempty"`
 }
 
-func (s Schedule) IsEmapty() bool {
-	return reflect.DeepEqual(s, Schedule{})
-}
-
-type Jobs struct {
-	Env   map[string]string
-	Steps []Step
+func (s ScheduleConfig) IsEmapty() bool {
+	return reflect.DeepEqual(s, ScheduleConfig{})
 }
 
 type Step struct {
-	Name string
-	Run  string
-}
-
-func (j Jobs) IsEmpty() bool {
-	return reflect.DeepEqual(j, Jobs{})
+	Name    string   `yaml:"name,omitempty"`
+	Run     string   `yaml:"run,omitempty"`
+	Lables  []string `yaml:"lables,omitempty"`
+	Depends []string `yaml:"depends,omitempty"`
 }
 
 func Unmarshal(data []byte) (*config, error) {
@@ -157,10 +153,6 @@ func Validate(data []byte) error {
 
 	if c.Schedule.IsEmapty() {
 		return errEmptySchedule
-	}
-
-	if c.Jobs.IsEmpty() {
-		return errEmptyJobs
 	}
 
 	return nil
