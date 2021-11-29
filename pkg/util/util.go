@@ -11,6 +11,15 @@ var (
 	errWrongEndpoint = errors.New("wrong endpoint")
 )
 
+func GetURL() (string, error) {
+	url, ok := viper.Get("url").(string)
+	if !ok {
+		return "", errors.New("can't find url in config file")
+	}
+
+	return url, nil
+}
+
 // GetEndpoints gets endpoints configuration in viper
 func GetEndpoints() ([]string, error) {
 	endpoints, ok := viper.Get("endpoints").([]interface{})

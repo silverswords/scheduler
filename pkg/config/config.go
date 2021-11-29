@@ -34,6 +34,7 @@ type config struct {
 	Jobs     Jobs
 	Upload   string
 }
+
 type Schedule struct {
 	Cron     string
 	Type     string

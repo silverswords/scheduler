@@ -64,6 +64,7 @@ var startCmd = &cobra.Command{
 		configContext, configCancleFunc := context.WithCancel(context.Background())
 		workerContext, workerCancleFunc := context.WithCancel(context.Background())
 
+		configCh := make(chan map[string]config.Config)
 		g.Add(func() error {
 			return configDiscover.Run(configContext, client.GetOriginClient())
 		}, func(err error) {
@@ -79,12 +80,12 @@ var startCmd = &cobra.Command{
 		})
 
 		g.Add(func() error {
-			server.ListenAndServe()
+			server.Start(configCh)
 			return nil
 		}, func(err error) {})
 
 		g.Add(func() error {
-			scheduler.Run(client, configDiscover.SyncCh(), workerDiscover.SyncCh())
+			scheduler.Run(client, configCh, workerDiscover.SyncCh())
 			return nil
 		}, func(err error) {
 			scheduler.Stop()
