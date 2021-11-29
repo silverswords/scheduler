@@ -25,8 +25,10 @@ type Pool struct {
 
 	isRunning bool
 
-	oldConfigs    map[string]config.Config
-	configs       map[string]config.Config
+	oldConfigs map[string]*config.Config
+	configs    map[string]*config.Config
+
+	runningConfig map[string]*runningConfig
 	triggerReload chan struct{}
 	syncCh        chan struct{}
 
@@ -63,7 +65,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]config.Config, 
 		select {
 		case <-timer.C:
 			sche := p.scheduleSet.First()
-			t := p.configs[sche.Name()].NewRemoteTask(sche)
+			t := p.configs[sche.Name()].NewTask(sche, 0)
 
 			p.queue.Add(t)
 			sche.Step()
@@ -99,7 +101,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]config.Config, 
 			}
 
 		case new := <-configs:
-			newConfigs := make(map[string]config.Config)
+			newConfigs := make(map[string]*config.Config)
 			for k, v := range new {
 				newConfigs[k] = v
 			}
@@ -130,7 +132,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]config.Config, 
 	}
 }
 
-func (p *Pool) setConfig(configs map[string]config.Config) {
+func (p *Pool) setConfig(configs map[string]*config.Config) {
 	p.mu.Lock()
 	p.oldConfigs, p.configs = p.configs, configs
 	p.mu.Unlock()

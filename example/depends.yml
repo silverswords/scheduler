@@ -1,0 +1,14 @@
+name: shell_task_cron
+schedule:
+  type: cron
+  cron: "*/1 * * * *"
+jobs:
+  env:
+    TASKTYPE: shell
+    SCHEDULETYPE: cron
+  steps:
+    - name: echo-task
+      run: echo task:$TASKTYPE
+    - name: echo-schedule
+      run: echo schedule:$SCHEDULETYPE
+      depends: [echo-task]

@@ -18,50 +18,40 @@ import (
 var (
 	errEmptyName     = errors.New("no name")
 	errEmptySchedule = errors.New("no schedule")
-	errEmptyJobs     = errors.New("no jobs")
 )
 
-type Config interface {
-	IsSame(Config) (bool, error)
-	NewTask() (string, task.Task)
-	NewRemoteTask(s schedule.Schedule) task.Task
-	NewSchedule() (schedule.Schedule, error)
+type Config struct {
+	Name     string         `yaml:"name"`
+	Schedule ScheduleConfig `yaml:"schedule"`
+	Jobs     struct {
+		Env   map[string]string `yaml:"env,omitempty"`
+		Steps []*Step           `yaml:"steps,omitempty"`
+	} `yaml:"jobs,omitempty"`
+
+
+	Upload string `yaml:"upload,omitempty"`
 }
 
-type config struct {
-	Name     string
-	Schedule Schedule
-	Jobs     Jobs
-	Upload   string
+type ScheduleConfig struct {
+	Cron     string   `yaml:"cron,omitempty"`
+	Type     string   `yaml:"type,omitempty"`
+	Priority int      `yaml:"priority,omitempty"`
+	Lables   []string `yaml:"lables,omitempty"`
 }
 
-type Schedule struct {
-	Cron     string
-	Type     string
-	Priority int
-	Lables   []string
-}
-
-func (s Schedule) IsEmapty() bool {
-	return reflect.DeepEqual(s, Schedule{})
-}
-
-type Jobs struct {
-	Env   map[string]string
-	Steps []Step
+func (s ScheduleConfig) IsEmapty() bool {
+	return reflect.DeepEqual(s, ScheduleConfig{})
 }
 
 type Step struct {
-	Name string
-	Run  string
+	Name    string   `yaml:"name,omitempty"`
+	Run     string   `yaml:"run,omitempty"`
+	Lables  []string `yaml:"lables,omitempty"`
+	Depends []string `yaml:"depends,omitempty"`
 }
 
-func (j Jobs) IsEmpty() bool {
-	return reflect.DeepEqual(j, Jobs{})
-}
-
-func Unmarshal(data []byte) (*config, error) {
-	c := config{}
+func Unmarshal(data []byte) (*Config, error) {
+	c := Config{}
 	if err := yaml.Unmarshal([]byte(data), &c); err != nil {
 		log.Fatalf("error: %v", err)
 		return nil, err
@@ -70,8 +60,8 @@ func Unmarshal(data []byte) (*config, error) {
 	return &c, nil
 }
 
-func (c *config) NewTask() (string, task.Task) {
-	return c.Name, task.New(func(ctx context.Context) error {
+func (c *Config) NewTask(s schedule.Schedule, step int) task.Task {
+	return task.New(func(ctx context.Context) error {
 		var msg string
 		log.Printf("task %s run start\n", c.Name)
 		for _, step := range c.Jobs.Steps {
@@ -102,16 +92,7 @@ func (c *config) NewTask() (string, task.Task) {
 	})
 }
 
-func (c *config) NewRemoteTask(s schedule.Schedule) task.Task {
-	return &task.RemoteTask{
-		Name:      c.Name,
-		StartTime: s.Next(),
-		Priority:  c.Schedule.Priority,
-		Lables:    c.Schedule.Lables,
-	}
-}
-
-func (c *config) NewSchedule() (s schedule.Schedule, err error) {
+func (c *Config) NewSchedule() (s schedule.Schedule, err error) {
 	switch c.Schedule.Type {
 	case "once":
 		s = schedule.NewOnceSchedule(c.Name)
@@ -127,18 +108,13 @@ func (c *config) NewSchedule() (s schedule.Schedule, err error) {
 	return
 }
 
-func (c *config) IsSame(newConfig Config) (bool, error) {
+func (c *Config) IsSame(newConfig *Config) (bool, error) {
 	old, err := yaml.Marshal(c)
 	if err != nil {
 		return false, err
 	}
 
-	config, ok := newConfig.(*config)
-	if !ok {
-		return false, errors.New("not the same type")
-	}
-
-	new, err := yaml.Marshal(config)
+	new, err := yaml.Marshal(newConfig)
 	if err != nil {
 		return false, err
 	}
@@ -147,7 +123,7 @@ func (c *config) IsSame(newConfig Config) (bool, error) {
 }
 
 func Validate(data []byte) error {
-	c := config{}
+	c := Config{}
 	if err := yaml.Unmarshal(data, &c); err != nil {
 		return err
 	}
@@ -158,10 +134,6 @@ func Validate(data []byte) error {
 
 	if c.Schedule.IsEmapty() {
 		return errEmptySchedule
-	}
-
-	if c.Jobs.IsEmpty() {
-		return errEmptyJobs
 	}
 
 	return nil
