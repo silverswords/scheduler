@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package scheduler.tasks;
+
+import weak "gogoproto/gogo.proto";
+import "api/utils/empty.proto";
+import "api/utils/timestamp.proto";
+
+option go_package = "github.com/silverswords/scheduler/api/tasks";
+
+service Tasks {
+    rpc Start(StartRequest) returns (scheduler.utils.Empty);
+    rpc Fail(FailRequest) returns (scheduler.utils.Empty);
+    rpc Finish(CompleteRequest) returns (scheduler.utils.Empty);
+}
+
+message StartRequest {
+    string name = 1 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp started_at = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+}
+
+message FailRequest {
+    string name = 1 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp failed_at = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+}
+
+message CompleteRequest {
+    string name = 1 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp completed_at = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+}

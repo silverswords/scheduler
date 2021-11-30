@@ -3,9 +3,13 @@ package cmd
 import (
 	"context"
 	"log"
+	"net"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"google.golang.org/grpc"
 
+	taskspb "github.com/silverswords/scheduler/api/tasks"
 	"github.com/silverswords/scheduler/pkg/api"
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/discover"
@@ -64,7 +68,8 @@ var startCmd = &cobra.Command{
 		configContext, configCancleFunc := context.WithCancel(context.Background())
 		workerContext, workerCancleFunc := context.WithCancel(context.Background())
 
-		configCh := make(chan map[string]config.Config)
+		grpcServer := grpc.NewServer()
+		configCh := make(chan map[string]*config.Config)
 		g.Add(func() error {
 			return configDiscover.Run(configContext, client.GetOriginClient())
 		}, func(err error) {
@@ -89,6 +94,20 @@ var startCmd = &cobra.Command{
 			return nil
 		}, func(err error) {
 			scheduler.Stop()
+		})
+
+		g.Add(func() error {
+			addr := viper.Get("grpc.addr").(string)
+			l, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+
+			taskspb.RegisterTasksServer(grpcServer, scheduler)
+
+			return grpcServer.Serve(l)
+		}, func(err error) {
+			grpcServer.Stop()
 		})
 
 		return g.Run()
