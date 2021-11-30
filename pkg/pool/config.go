@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/silverswords/scheduler/pkg/config"
@@ -27,6 +28,7 @@ func (s *step) newTask() task.Task {
 }
 
 type runningConfig struct {
+	lock        sync.Mutex
 	name        string
 	tasks       map[string]*step
 	createdTime time.Time
@@ -77,6 +79,8 @@ func (c *runningConfig) Graph() ([]task.Task, error) {
 }
 
 func (c *runningConfig) Complete(complete string) []task.Task {
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	completeTask := c.tasks[complete]
 	completeTask.completed = true
 	avaliableTask := []string{}

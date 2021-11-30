@@ -130,20 +130,20 @@ func (c *Client) ListWorkers(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) DeliverTask(ctx context.Context, worker string, task *task.RemoteTask) (string, error) {
+func (c *Client) DeliverTask(ctx context.Context, worker string, task *task.RemoteTask) error {
 	value, err := task.Encode()
 	if err != nil {
 		log.Println(err)
-		return "", err
+		return err
 	}
 
 	key := c.taskPrefix + worker + "/" + task.Name + time.Now().Format(time.RFC3339)
 	if _, err := c.etcdClient.Put(ctx, key, string(value)); err != nil {
 		log.Println("deliver task fail:", err)
-		return "", err
+		return err
 	}
 
-	return key, nil
+	return nil
 }
 
 func (c *Client) Watch(ctx context.Context, key string) clientv3.WatchChan {

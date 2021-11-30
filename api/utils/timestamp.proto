@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package scheduler.utils;
+option go_package = "github.com/silverswords/scheduler/api/utils";
+
+message Timestamp {
+    int64 seconds = 1;
+  
+    int32 nanos = 2;
+}

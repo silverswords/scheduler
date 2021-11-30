@@ -1,0 +1,9 @@
+syntax = "proto3";
+
+package scheduler.utils;
+option go_package = "github.com/silverswords/scheduler/api/utils";
+// A generic empty message that you can re-use to avoid defining duplicated
+// empty messages in your APIs. A typical example is to use it as the request
+// or the response type of an API method. 
+// The JSON representation for `Empty` is empty JSON object `{}`.
+message Empty {}

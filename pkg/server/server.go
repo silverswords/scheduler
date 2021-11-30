@@ -23,16 +23,16 @@ const (
 )
 
 type manager struct {
-	configCh chan map[string]config.Config
+	configCh chan map[string]*config.Config
 }
 
-func newManager(configCh chan map[string]config.Config) *manager {
+func newManager(configCh chan map[string]*config.Config) *manager {
 	return &manager{
 		configCh: configCh,
 	}
 }
 
-func Start(configCh chan map[string]config.Config) {
+func Start(configCh chan map[string]*config.Config) {
 	if err := logPrint(); err != nil {
 		panic(err)
 	}
@@ -64,7 +64,7 @@ func (m *manager) apply(c *gin.Context) {
 		return
 	}
 
-	m.configCh <- map[string]config.Config{
+	m.configCh <- map[string]*config.Config{
 		req.Key: cf,
 	}
 

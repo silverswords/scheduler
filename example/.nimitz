@@ -7,3 +7,6 @@ prefix:
   worker: worker
   config: config
   task: task
+
+grpc:
+  addr: 127.0.0.1:8000

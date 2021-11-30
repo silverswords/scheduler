@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	taskspb "github.com/silverswords/scheduler/api/tasks"
 	"github.com/silverswords/scheduler/pkg/api"
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/schedule"
@@ -28,11 +29,13 @@ type Pool struct {
 	oldConfigs map[string]*config.Config
 	configs    map[string]*config.Config
 
-	runningConfig map[string]*runningConfig
+	runningConfig []*runningConfig
 	triggerReload chan struct{}
 	syncCh        chan struct{}
 
 	workers map[string]map[string]bool
+
+	taskspb.UnimplementedTasksServer
 }
 
 // New creates a pool
@@ -55,7 +58,7 @@ func New() *Pool {
 }
 
 // Run -
-func (p *Pool) Run(client *api.Client, configs <-chan map[string]config.Config, workers <-chan map[string]interface{}) {
+func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config, workers <-chan map[string]interface{}) {
 	p.isRunning = true
 	go p.reloader()
 	go p.dispatcher(client)
@@ -65,9 +68,19 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]config.Config, 
 		select {
 		case <-timer.C:
 			sche := p.scheduleSet.First()
-			t := p.configs[sche.Name()].NewTask(sche, 0)
+			running := fromConfig(p.configs[sche.Name()])
+			p.runningConfig = append(p.runningConfig, running)
 
-			p.queue.Add(t)
+			tasks, err := running.Graph()
+			if err != nil {
+				log.Printf("config error: %s\n", err)
+				continue
+			}
+
+			for _, t := range tasks {
+				p.queue.Add(t)
+			}
+
 			sche.Step()
 			p.mu.Lock()
 			timer = p.caculateTimer()
@@ -222,42 +235,13 @@ func (p *Pool) dispatcher(client *api.Client) {
 		}
 
 		for _, worker := range workers {
-			key, err := client.DeliverTask(context.Background(), worker, task)
+			err := client.DeliverTask(context.Background(), worker, task)
 			if err != nil {
 				log.Println("deliver task failed, error: ", err)
 				continue
 			}
 
 			log.Printf("deliver task success, worker: %s, task: %s", worker, task.Name)
-			go func() {
-				watchChan := client.Watch(context.Background(), key)
-			watch:
-				events, ok := <-watchChan
-				if !ok {
-					log.Printf("watch task %s channel has closed", task.Name)
-					return
-				}
-
-				for _, event := range events.Events {
-					err := task.Decode(event.Kv.Value)
-					if err != nil {
-						log.Printf("can't unmarshal task, err:%s\n", err)
-						continue
-					}
-
-					if !task.Done {
-						goto watch
-					}
-					p.queue.Done(task)
-					if task.Err != nil {
-						log.Printf("task run fail, error: %s\n", task.Err)
-						task.Done, task.Err = false, nil
-						p.queue.Add(task)
-					}
-
-					log.Printf("task %s run success\n", task.Name)
-				}
-			}()
 			break
 		}
 	}
