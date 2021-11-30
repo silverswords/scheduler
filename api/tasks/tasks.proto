@@ -11,20 +11,27 @@ option go_package = "github.com/silverswords/scheduler/api/tasks";
 service Tasks {
     rpc Start(StartRequest) returns (scheduler.utils.Empty);
     rpc Fail(FailRequest) returns (scheduler.utils.Empty);
-    rpc Finish(CompleteRequest) returns (scheduler.utils.Empty);
+    rpc Complete(CompleteRequest) returns (scheduler.utils.Empty);
 }
 
 message StartRequest {
-    string name = 1 [(gogoproto.nullable) = false];
-    scheduler.utils.Timestamp started_at = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    string config_name = 1 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp config_start_time = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    string step_name = 3 [(gogoproto.nullable) = false];
+    string worker_name = 4 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp started_at = 5 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 message FailRequest {
-    string name = 1 [(gogoproto.nullable) = false];
-    scheduler.utils.Timestamp failed_at = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    string config_name = 1 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp config_start_time = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    string step_name = 3 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp failed_at = 4 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }
 
 message CompleteRequest {
-    string name = 1 [(gogoproto.nullable) = false];
-    scheduler.utils.Timestamp completed_at = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    string config_name = 1 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp config_start_time = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+    string step_name = 3 [(gogoproto.nullable) = false];
+    scheduler.utils.Timestamp completed_at = 4 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }

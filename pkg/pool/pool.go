@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"container/heap"
 	"context"
 	"log"
 	"sort"
@@ -29,7 +30,7 @@ type Pool struct {
 	oldConfigs map[string]*config.Config
 	configs    map[string]*config.Config
 
-	runningConfig []*runningConfig
+	runningConfig configHeap
 	triggerReload chan struct{}
 	syncCh        chan struct{}
 
@@ -69,7 +70,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 		case <-timer.C:
 			sche := p.scheduleSet.First()
 			running := fromConfig(p.configs[sche.Name()])
-			p.runningConfig = append(p.runningConfig, running)
+			heap.Push(p.runningConfig, running)
 
 			tasks, err := running.Graph()
 			if err != nil {

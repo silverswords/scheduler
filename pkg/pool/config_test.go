@@ -15,14 +15,15 @@ func initStepConfigPtr(steps map[string]*step, c *runningConfig) {
 		step.wait = make(map[string]struct{})
 		step.next = map[string]struct{}{}
 		step.c = c
+		step.state = pendding
 	}
 }
 
 func TestRunningConfigGraph(t *testing.T) {
 	type fields struct {
-		name        string
-		tasks       map[string]*step
-		createdTime time.Time
+		name      string
+		tasks     map[string]*step
+		startTime time.Time
 	}
 
 	tests := []struct {
@@ -48,11 +49,11 @@ func TestRunningConfigGraph(t *testing.T) {
 						},
 					},
 				},
-				createdTime: time.Time{},
+				startTime: time.Time{},
 			},
 			want: []task.Task{
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "basic" + "-" + "step1",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "basic" + nameSeparator + "step1",
 				},
 			},
 		},
@@ -90,14 +91,14 @@ func TestRunningConfigGraph(t *testing.T) {
 						},
 					},
 				},
-				createdTime: time.Time{},
+				startTime: time.Time{},
 			},
 			want: []task.Task{
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "parallel" + "-" + "step1-1",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step1-1",
 				},
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "parallel" + "-" + "step1-2",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step1-2",
 				},
 			},
 		},
@@ -106,9 +107,9 @@ func TestRunningConfigGraph(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &runningConfig{
-				name:        tt.fields.name,
-				tasks:       tt.fields.tasks,
-				createdTime: tt.fields.createdTime,
+				name:      tt.fields.name,
+				tasks:     tt.fields.tasks,
+				startTime: tt.fields.startTime,
 			}
 			initStepConfigPtr(c.tasks, c)
 
@@ -124,11 +125,11 @@ func TestRunningConfigGraph(t *testing.T) {
 	}
 }
 
-func Test_runningConfig_Complete(t *testing.T) {
+func TestRunningConfigComplete(t *testing.T) {
 	type fields struct {
-		name        string
-		tasks       map[string]*step
-		createdTime time.Time
+		name      string
+		tasks     map[string]*step
+		startTime time.Time
 	}
 
 	type args struct {
@@ -141,6 +142,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 		args    args
 		prepare func(c *runningConfig)
 		want    []task.Task
+		wantErr bool
 	}{
 		{
 			name: "basic",
@@ -159,7 +161,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 						},
 					},
 				},
-				createdTime: time.Time{},
+				startTime: time.Time{},
 			},
 			args: args{complete: "step1"},
 			prepare: func(c *runningConfig) {
@@ -167,7 +169,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 			},
 			want: []task.Task{
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "basic" + "-" + "step2",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "basic" + nameSeparator + "step2",
 				},
 			},
 		},
@@ -188,7 +190,34 @@ func Test_runningConfig_Complete(t *testing.T) {
 						},
 					},
 				},
-				createdTime: time.Time{},
+				startTime: time.Time{},
+			},
+			args: args{complete: "step1"},
+			prepare: func(c *runningConfig) {
+				c.Graph()
+				c.Complete("step1")
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "basic",
+			fields: fields{
+				name: "basic",
+				tasks: map[string]*step{
+					"step1": {
+						Step: &config.Step{
+							Name: "step1",
+						},
+					},
+					"step2": {
+						Step: &config.Step{
+							Name:    "step2",
+							Depends: []string{"step1"},
+						},
+					},
+				},
+				startTime: time.Time{},
 			},
 			args: args{complete: "step2"},
 			prepare: func(c *runningConfig) {
@@ -231,7 +260,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 						},
 					},
 				},
-				createdTime: time.Time{},
+				startTime: time.Time{},
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
@@ -239,7 +268,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 			args: args{complete: "step1-1"},
 			want: []task.Task{
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "parallel" + "-" + "step2-1",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-1",
 				},
 			},
 		},
@@ -277,7 +306,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 						},
 					},
 				},
-				createdTime: time.Time{},
+				startTime: time.Time{},
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
@@ -286,10 +315,10 @@ func Test_runningConfig_Complete(t *testing.T) {
 			args: args{complete: "step1-2"},
 			want: []task.Task{
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "parallel" + "-" + "step2-2",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-2",
 				},
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "parallel" + "-" + "step2-3",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-3",
 				},
 			},
 		},
@@ -327,7 +356,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 						},
 					},
 				},
-				createdTime: time.Time{},
+				startTime: time.Time{},
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
@@ -335,7 +364,7 @@ func Test_runningConfig_Complete(t *testing.T) {
 			args: args{complete: "step1-2"},
 			want: []task.Task{
 				&task.RemoteTask{
-					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + "-" + "parallel" + "-" + "step2-3",
+					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-3",
 				},
 			},
 		},
@@ -344,14 +373,20 @@ func Test_runningConfig_Complete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &runningConfig{
-				name:        tt.fields.name,
-				tasks:       tt.fields.tasks,
-				createdTime: tt.fields.createdTime,
+				name:      tt.fields.name,
+				tasks:     tt.fields.tasks,
+				startTime: tt.fields.startTime,
 			}
 			initStepConfigPtr(c.tasks, c)
 			tt.prepare(c)
 
-			if got := c.Complete(tt.args.complete); !reflect.DeepEqual(got, tt.want) {
+			got, err := c.Complete(tt.args.complete)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("runningConfig.Complete() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("name %s, runningConfig.Complete() = %v, want %v", tt.name, got, tt.want)
 			}
 		})

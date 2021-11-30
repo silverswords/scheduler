@@ -2,6 +2,7 @@ package pool
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,43 +12,133 @@ import (
 	"github.com/silverswords/scheduler/pkg/task"
 )
 
+const nameSeparator = "-"
+
+func buildStateError(got stepState, expect ...stepState) error {
+	if len(expect) == 1 {
+		return fmt.Errorf("wrong step state, expect %s, got %s", expect[0], got)
+	}
+	return fmt.Errorf("wrong step state, expect %v, got %s", expect, got)
+}
+
+type stepState string
+
+const pendding stepState = "pendding"
+const ready stepState = "ready"
+const running stepState = "running"
+const failed stepState = "failed"
+const completed stepState = "completed"
+
 type step struct {
 	*config.Step
 
-	c             *runningConfig
+	c *runningConfig
+
+	state         stepState
 	completed     bool
 	wait          map[string]struct{}
 	next          map[string]struct{}
 	runningWorker string
 }
 
-func (s *step) newTask() task.Task {
-	return &task.RemoteTask{
-		Name: strings.Join([]string{strconv.FormatInt(s.c.createdTime.UnixMicro(), 10), s.c.name, s.Name}, "-"),
+func (s *step) newTask() (task.Task, error) {
+	if s.state != pendding && s.state != failed {
+		return nil, buildStateError(s.state, pendding, failed)
 	}
+
+	s.state = ready
+	return &task.RemoteTask{
+		Name: strings.Join([]string{strconv.FormatInt(s.c.startTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
+	}, nil
+}
+
+func (s *step) start(workerName string) error {
+	if s.state != ready {
+		return buildStateError(s.state, ready)
+	}
+
+	s.runningWorker, s.state = workerName, running
+	return nil
+}
+
+func (s *step) complete() error {
+	if s.state != running {
+		return buildStateError(s.state, running)
+	}
+
+	s.state = completed
+	return nil
+}
+
+func (s *step) fail() error {
+	if s.state != running {
+		return buildStateError(s.state, running)
+	}
+
+	s.state = failed
+	return nil
+}
+
+type configHeap []*runningConfig
+
+func (h configHeap) Len() int { return len(h) }
+func (h configHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+func (h configHeap) Less(i, j int) bool {
+	if h[i].startTime.IsZero() {
+		return false
+	}
+	if h[j].startTime.IsZero() {
+		return true
+	}
+	return h[i].startTime.Before(h[j].startTime)
+}
+
+func (h configHeap) First() *runningConfig {
+	return h[0]
+}
+
+func (h configHeap) Push(config interface{}) {
+	h = append(h, config.(*runningConfig))
+}
+
+func (h configHeap) Pop() interface{} {
+	result := h[len(h)-1]
+	h = h[:len(h)-1]
+	return result
+}
+
+func (h configHeap) Search(t time.Time, name string) *runningConfig {
+	i := sort.Search(len(h), func(i int) bool {
+		return h[i].startTime.Equal(t) && h[i].name == name
+	})
+	return h[i]
 }
 
 type runningConfig struct {
-	lock        sync.Mutex
-	name        string
-	tasks       map[string]*step
-	createdTime time.Time
+	lock      sync.Mutex
+	name      string
+	tasks     map[string]*step
+	startTime time.Time
 }
 
 func fromConfig(c *config.Config) *runningConfig {
 	config := &runningConfig{
-		name:        c.Name,
-		tasks:       make(map[string]*step),
-		createdTime: time.Now(),
+		name:      c.Name,
+		tasks:     make(map[string]*step),
+		startTime: time.Now(),
 	}
 
 	tasks := make(map[string]*step)
 	for _, s := range c.Jobs.Steps {
 		tasks[s.Name] = &step{
-			Step: s,
-			c:    config,
-			wait: make(map[string]struct{}),
-			next: make(map[string]struct{}),
+			Step:  s,
+			c:     config,
+			state: pendding,
+			wait:  make(map[string]struct{}),
+			next:  make(map[string]struct{}),
 		}
 	}
 
@@ -59,7 +150,11 @@ func (c *runningConfig) Graph() ([]task.Task, error) {
 
 	for _, s := range c.tasks {
 		if len(s.Depends) == 0 {
-			avaliableTask = append(avaliableTask, s.newTask())
+			t, err := s.newTask()
+			if err != nil {
+				return nil, err
+			}
+			avaliableTask = append(avaliableTask, t)
 		}
 
 		for _, depend := range s.Depends {
@@ -78,27 +173,30 @@ func (c *runningConfig) Graph() ([]task.Task, error) {
 	return avaliableTask, nil
 }
 
-func (c *runningConfig) Complete(complete string) []task.Task {
+func (c *runningConfig) Complete(complete string) ([]task.Task, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	completeTask := c.tasks[complete]
 	completeTask.completed = true
 	avaliableTask := []string{}
-	fmt.Println(completeTask.next, avaliableTask)
+
 	for task := range completeTask.next {
 		delete(c.tasks[task].wait, complete)
 		if len(c.tasks[task].wait) == 0 {
 			avaliableTask = append(avaliableTask, task)
 		}
-		fmt.Println(c.tasks[task].wait, avaliableTask)
 	}
 
 	return c.newTask(avaliableTask)
 }
 
-func (c *runningConfig) newTask(avaliableTask []string) (result []task.Task) {
-	for _, task := range avaliableTask {
-		result = append(result, c.tasks[task].newTask())
+func (c *runningConfig) newTask(avaliableTask []string) (result []task.Task, err error) {
+	for _, taskName := range avaliableTask {
+		t, err := c.tasks[taskName].newTask()
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, t)
 	}
 
 	return

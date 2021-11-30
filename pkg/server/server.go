@@ -54,7 +54,7 @@ func (m *manager) apply(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Println("[apply] bind params failed: ", err)
+		log.Println("[apply] bind params failed: ", err)
 		c.String(http.StatusBadRequest, "server error")
 		return
 	}
@@ -77,7 +77,7 @@ func (m *manager) delete(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Println("[delete] bind params failed: ", err)
+		log.Println("[delete] bind params failed: ", err)
 		c.String(http.StatusBadRequest, "server error")
 		return
 	}
@@ -93,7 +93,7 @@ func (m *manager) cancel(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		fmt.Println("[cancel] bind params failed: ", err)
+		log.Println("[cancel] bind params failed: ", err)
 		c.String(http.StatusBadRequest, "server error")
 		return
 	}
