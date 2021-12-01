@@ -12,6 +12,10 @@ import (
 	"google.golang.org/grpc"
 )
 
+type mockService struct {
+	taskspb.UnimplementedTasksServer
+}
+
 func TestSerive(t *testing.T) {
 	go func() {
 		l, err := net.Listen("tcp", ":8080")
@@ -21,7 +25,7 @@ func TestSerive(t *testing.T) {
 
 		grpcServer := grpc.NewServer()
 
-		taskspb.RegisterTasksServer(grpcServer, &Pool{})
+		taskspb.RegisterTasksServer(grpcServer, &mockService{})
 
 		if err := grpcServer.Serve(l); err != nil {
 			log.Fatalf("failed to serve: %v", err)
@@ -41,10 +45,11 @@ func TestSerive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
 
-	resp, err := tasksClient.Fail(ctx, &taskspb.FailRequest{Name: "basic", FailedAt: &utils.Timestamp{Seconds: time.Now().Unix(), Nanos: int32(time.Now().Nanosecond())}})
-	if err != nil {
-		t.Fatal(err)
+	resp, err := tasksClient.Fail(ctx, &taskspb.FailRequest{ConfigName: "basic",
+		FailedAt: utils.FromTime(time.Time{})})
+	if err == nil {
+		t.Fatal("expect error")
 	}
 
-	t.Log(resp)
+	t.Log(resp, err)
 }
