@@ -8,6 +8,8 @@ import (
 )
 
 func (p *Pool) Start(ctx context.Context, req *taskspb.StartRequest) (*utilspb.Empty, error) {
+	p.runningMu.Lock()
+	defer p.runningMu.Unlock()
 	config := p.runningConfig.Search(req.ConfigStartTime.ToTime(), req.ConfigName)
 	if err := config.tasks[req.StepName].start(req.WorkerName); err != nil {
 		return nil, err
@@ -17,6 +19,8 @@ func (p *Pool) Start(ctx context.Context, req *taskspb.StartRequest) (*utilspb.E
 }
 
 func (p *Pool) Fail(ctx context.Context, req *taskspb.FailRequest) (*utilspb.Empty, error) {
+	p.runningMu.Lock()
+	defer p.runningMu.Unlock()
 	config := p.runningConfig.Search(req.ConfigStartTime.ToTime(), req.ConfigName)
 	if err := config.tasks[req.StepName].fail(); err != nil {
 		return nil, err
@@ -26,15 +30,20 @@ func (p *Pool) Fail(ctx context.Context, req *taskspb.FailRequest) (*utilspb.Emp
 }
 
 func (p *Pool) Complete(ctx context.Context, req *taskspb.CompleteRequest) (*utilspb.Empty, error) {
+	p.runningMu.Lock()
 	config := p.runningConfig.Search(req.ConfigStartTime.ToTime(), req.ConfigName)
-	if err := config.tasks[req.StepName].complete(); err != nil {
-		return nil, err
-	}
 
 	tasks, err := config.Complete(req.StepName)
 	if err != nil {
+		p.runningMu.Unlock()
 		return nil, err
 	}
+
+	if config.completedNum == 0 {
+		p.runningConfig.Remove(config)
+	}
+
+	p.runningMu.Unlock()
 
 	for _, t := range tasks {
 		p.queue.Add(t)

@@ -25,7 +25,7 @@ func TestRunningConfigGraph(t *testing.T) {
 	type fields struct {
 		name      string
 		tasks     map[string]*step
-		startTime time.Time
+		StartTime time.Time
 	}
 
 	tests := []struct {
@@ -51,7 +51,7 @@ func TestRunningConfigGraph(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			want: []task.Task{
 				&task.RemoteTask{
@@ -93,7 +93,7 @@ func TestRunningConfigGraph(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			want: []task.Task{
 				&task.RemoteTask{
@@ -111,7 +111,7 @@ func TestRunningConfigGraph(t *testing.T) {
 			c := &runningConfig{
 				name:      tt.fields.name,
 				tasks:     tt.fields.tasks,
-				startTime: tt.fields.startTime,
+				StartTime: tt.fields.StartTime,
 			}
 			initStepConfigPtr(c.tasks, c)
 
@@ -131,7 +131,7 @@ func TestRunningConfigComplete(t *testing.T) {
 	type fields struct {
 		name      string
 		tasks     map[string]*step
-		startTime time.Time
+		StartTime time.Time
 	}
 
 	type args struct {
@@ -163,7 +163,7 @@ func TestRunningConfigComplete(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			args: args{complete: "step1"},
 			prepare: func(c *runningConfig) {
@@ -193,7 +193,7 @@ func TestRunningConfigComplete(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			args: args{complete: "step1"},
 			prepare: func(c *runningConfig) {
@@ -221,7 +221,7 @@ func TestRunningConfigComplete(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			args: args{complete: "step2"},
 			prepare: func(c *runningConfig) {
@@ -266,7 +266,7 @@ func TestRunningConfigComplete(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
@@ -313,7 +313,7 @@ func TestRunningConfigComplete(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
@@ -365,7 +365,7 @@ func TestRunningConfigComplete(t *testing.T) {
 						},
 					},
 				},
-				startTime: time.Time{},
+				StartTime: time.Time{},
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
@@ -385,7 +385,7 @@ func TestRunningConfigComplete(t *testing.T) {
 			c := &runningConfig{
 				name:      tt.fields.name,
 				tasks:     tt.fields.tasks,
-				startTime: tt.fields.startTime,
+				StartTime: tt.fields.StartTime,
 			}
 			initStepConfigPtr(c.tasks, c)
 			tt.prepare(c)

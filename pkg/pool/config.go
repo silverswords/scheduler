@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -14,6 +15,19 @@ import (
 
 const nameSeparator = "-"
 
+var errSetTwice = errors.New("can't not set status change hook twice")
+
+var statusChangeHook func(s *step)
+
+func SetStatusChangeHook(f func(s *step)) error {
+	if statusChangeHook == nil {
+		statusChangeHook = f
+		return nil
+	}
+
+	return errSetTwice
+}
+
 func buildStateError(got stepState, expect ...stepState) error {
 	if len(expect) == 1 {
 		return fmt.Errorf("wrong step state, expect %s, got %s", expect[0], got)
@@ -21,13 +35,32 @@ func buildStateError(got stepState, expect ...stepState) error {
 	return fmt.Errorf("wrong step state, expect %v, got %s", expect, got)
 }
 
-type stepState string
+type stepState int
 
-const pendding stepState = "pendding"
-const ready stepState = "ready"
-const running stepState = "running"
-const failed stepState = "failed"
-const completed stepState = "completed"
+const (
+	pendding stepState = iota
+	ready
+	running
+	failed
+	completed
+)
+
+func (s stepState) String() string {
+	switch s {
+	case pendding:
+		return "pendding"
+	case ready:
+		return "ready"
+	case running:
+		return "running"
+	case failed:
+		return "failed"
+	case completed:
+		return "completed"
+	default:
+		return "wrong"
+	}
+}
 
 type step struct {
 	*config.Step
@@ -46,7 +79,7 @@ func (s *step) newTask() (task.Task, error) {
 
 	s.state = ready
 	return &task.RemoteTask{
-		Name: strings.Join([]string{strconv.FormatInt(s.c.startTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
+		Name: strings.Join([]string{strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
 	}, nil
 }
 
@@ -56,6 +89,11 @@ func (s *step) start(workerName string) error {
 	}
 
 	s.runningWorker, s.state = workerName, running
+
+	if statusChangeHook != nil {
+		go statusChangeHook(s)
+	}
+
 	return nil
 }
 
@@ -65,6 +103,10 @@ func (s *step) complete() error {
 	}
 
 	s.state = completed
+
+	if statusChangeHook != nil {
+		go statusChangeHook(s)
+	}
 	return nil
 }
 
@@ -74,6 +116,9 @@ func (s *step) fail() error {
 	}
 
 	s.state = failed
+	if statusChangeHook != nil {
+		go statusChangeHook(s)
+	}
 	return nil
 }
 
@@ -85,13 +130,13 @@ func (h configHeap) Swap(i, j int) {
 }
 
 func (h configHeap) Less(i, j int) bool {
-	if h[i].startTime.IsZero() {
+	if h[i].StartTime.IsZero() {
 		return false
 	}
-	if h[j].startTime.IsZero() {
+	if h[j].StartTime.IsZero() {
 		return true
 	}
-	return h[i].startTime.Before(h[j].startTime)
+	return h[i].StartTime.Before(h[j].StartTime)
 }
 
 func (h configHeap) First() *runningConfig {
@@ -102,31 +147,40 @@ func (h configHeap) Push(config interface{}) {
 	h = append(h, config.(*runningConfig))
 }
 
-func (h configHeap) Pop() interface{} {
-	result := h[len(h)-1]
-	h = h[:len(h)-1]
-	return result
+func (h configHeap) Pop() (result interface{}) {
+	result, h = h[len(h)-1], h[:len(h)-1]
+	return
 }
 
 func (h configHeap) Search(t time.Time, name string) *runningConfig {
 	i := sort.Search(len(h), func(i int) bool {
-		return h[i].startTime.Equal(t) && h[i].name == name
+		return h[i].StartTime.Equal(t) && h[i].name == name
 	})
+
 	return h[i]
 }
 
+func (h configHeap) Remove(c *runningConfig) {
+	i := sort.Search(len(h), func(i int) bool {
+		return h[i].StartTime.Equal(c.StartTime) && h[i].name == c.name
+	})
+
+	h = append(h[0:i], h[i+1:]...)
+}
+
 type runningConfig struct {
-	lock      sync.Mutex
-	name      string
-	tasks     map[string]*step
-	startTime time.Time
+	lock         sync.Mutex
+	name         string
+	tasks        map[string]*step
+	StartTime    time.Time
+	completedNum int
 }
 
 func fromConfig(c *config.Config) *runningConfig {
 	config := &runningConfig{
 		name:      c.Name,
 		tasks:     make(map[string]*step),
-		startTime: time.Now(),
+		StartTime: time.Now(),
 	}
 
 	tasks := make(map[string]*step)
@@ -178,6 +232,7 @@ func (c *runningConfig) Complete(complete string) ([]task.Task, error) {
 	if err := completeTask.complete(); err != nil {
 		return nil, err
 	}
+	c.completedNum++
 
 	avaliableTask := []string{}
 

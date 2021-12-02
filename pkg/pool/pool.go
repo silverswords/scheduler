@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"context"
 	"log"
+	"path"
 	"sort"
 	"sync"
 	"time"
@@ -30,6 +31,7 @@ type Pool struct {
 	oldConfigs map[string]*config.Config
 	configs    map[string]*config.Config
 
+	runningMu     sync.RWMutex
 	runningConfig configHeap
 	triggerReload chan struct{}
 	syncCh        chan struct{}
@@ -63,16 +65,30 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 	p.isRunning = true
 	go p.reloader()
 	go p.dispatcher(client)
+	etcdClient := client.GetOriginClient()
+	SetStatusChangeHook(func(s *step) {
+		_, err := etcdClient.Put(context.TODO(), path.Join("global", "running", s.c.name,
+			s.c.StartTime.Format(time.RFC1123), s.Name), ready.String())
+		if err != nil {
+			log.Println(err)
+		}
+	})
 
 	timer := p.caculateTimer()
 	for {
 		select {
 		case <-timer.C:
 			sche := p.scheduleSet.First()
+			p.mu.RLock()
 			running := fromConfig(p.configs[sche.Name()])
+			p.mu.RUnlock()
+
+			p.runningMu.Lock()
 			heap.Push(p.runningConfig, running)
 
 			tasks, err := running.Graph()
+			p.runningMu.Unlock()
+
 			if err != nil {
 				log.Printf("config error: %s\n", err)
 				continue
@@ -127,7 +143,6 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 			}
 
 		case newWorkers := <-workers:
-			p.mu.Lock()
 			new := make(map[string]map[string]bool)
 			for k, v := range newWorkers {
 				new[k] = make(map[string]bool)
@@ -135,7 +150,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 					new[k][lable] = true
 				}
 			}
-
+			p.mu.Lock()
 			p.workers = new
 			log.Printf("update worker list: %v", p.workers)
 			p.mu.Unlock()
