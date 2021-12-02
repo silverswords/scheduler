@@ -1,0 +1,22 @@
+on: [push, pull_request]
+name: Test
+jobs:
+  test:
+    strategy:
+      matrix:
+        go-version: [1.16, 1.17]
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: ${{ matrix.go-version }}
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Go Vendor
+      run: go mod vendor
+    - name: Protobuf
+      run: protoc -I=. -I=vendor/github.com/gogo/protobuf --go_out=paths=source_relative:. --go-grpc_out=paths=source_relative:. ./api/*/*.proto
+    - name: Test
+      run: go test ./...
