@@ -22,9 +22,12 @@ func (p *Pool) Fail(ctx context.Context, req *taskspb.FailRequest) (*utilspb.Emp
 	p.runningMu.Lock()
 	defer p.runningMu.Unlock()
 	config := p.runningConfig.Search(req.ConfigStartTime.ToTime(), req.ConfigName)
-	if err := config.tasks[req.StepName].fail(); err != nil {
+	task, err := config.Fail(req.StepName)
+	if err != nil {
 		return nil, err
 	}
+
+	p.queue.Add(task)
 
 	return &utilspb.Empty{}, nil
 }

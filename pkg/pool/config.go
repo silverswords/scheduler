@@ -15,13 +15,25 @@ import (
 
 const nameSeparator = "-"
 
-var errSetTwice = errors.New("can't not set status change hook twice")
+var errSetTwice = errors.New("can't not set state change hook twice")
 
-var statusChangeHook func(s *step)
+var (
+	stepStateChangeHook   func(s *step)
+	configStateChangeHook func(c *runningConfig)
+)
 
-func SetStatusChangeHook(f func(s *step)) error {
-	if statusChangeHook == nil {
-		statusChangeHook = f
+func SetStepStateChangeHook(f func(s *step)) error {
+	if stepStateChangeHook == nil {
+		stepStateChangeHook = f
+		return nil
+	}
+
+	return errSetTwice
+}
+
+func SetConfigStateChangeHook(f func(c *runningConfig)) error {
+	if configStateChangeHook == nil {
+		configStateChangeHook = f
 		return nil
 	}
 
@@ -38,27 +50,27 @@ func buildStateError(got stepState, expect ...stepState) error {
 type stepState int
 
 const (
-	pendding stepState = iota
-	ready
-	running
-	failed
-	completed
+	stepPendding stepState = iota
+	stepReady
+	stepRunning
+	stepFailed
+	stepCompleted
 )
 
 func (s stepState) String() string {
 	switch s {
-	case pendding:
-		return "pendding"
-	case ready:
-		return "ready"
-	case running:
-		return "running"
-	case failed:
-		return "failed"
-	case completed:
-		return "completed"
+	case stepPendding:
+		return "stepPendding"
+	case stepReady:
+		return "stepReady"
+	case stepRunning:
+		return "stepRunning"
+	case stepFailed:
+		return "stepFailed"
+	case stepCompleted:
+		return "stepCompleted"
 	default:
-		return "wrong"
+		return "wrong state"
 	}
 }
 
@@ -66,58 +78,63 @@ type step struct {
 	*config.Step
 	c *runningConfig
 
-	state         stepState
-	wait          map[string]struct{}
-	next          map[string]struct{}
-	runningWorker string
+	state             stepState
+	wait              map[string]struct{}
+	next              map[string]struct{}
+	stepRunningWorker string
+	retryTimes        int
 }
 
 func (s *step) newTask() (task.Task, error) {
-	if s.state != pendding && s.state != failed {
-		return nil, buildStateError(s.state, pendding, failed)
+	if s.state != stepPendding && s.state != stepFailed {
+		return nil, buildStateError(s.state, stepPendding, stepFailed)
 	}
 
-	s.state = ready
+	s.state = stepReady
+	if stepStateChangeHook != nil {
+		go stepStateChangeHook(s)
+	}
+
 	return &task.RemoteTask{
 		Name: strings.Join([]string{strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
 	}, nil
 }
 
 func (s *step) start(workerName string) error {
-	if s.state != ready {
-		return buildStateError(s.state, ready)
+	if s.state != stepReady {
+		return buildStateError(s.state, stepReady)
 	}
 
-	s.runningWorker, s.state = workerName, running
+	s.stepRunningWorker, s.state = workerName, stepRunning
 
-	if statusChangeHook != nil {
-		go statusChangeHook(s)
+	if stepStateChangeHook != nil {
+		go stepStateChangeHook(s)
 	}
 
 	return nil
 }
 
 func (s *step) complete() error {
-	if s.state != running {
-		return buildStateError(s.state, running)
+	if s.state != stepRunning {
+		return buildStateError(s.state, stepRunning)
 	}
 
-	s.state = completed
+	s.state = stepCompleted
 
-	if statusChangeHook != nil {
-		go statusChangeHook(s)
+	if stepStateChangeHook != nil {
+		go stepStateChangeHook(s)
 	}
 	return nil
 }
 
 func (s *step) fail() error {
-	if s.state != running {
-		return buildStateError(s.state, running)
+	if s.state != stepRunning {
+		return buildStateError(s.state, stepRunning)
 	}
 
-	s.state = failed
-	if statusChangeHook != nil {
-		go statusChangeHook(s)
+	s.state = stepFailed
+	if stepStateChangeHook != nil {
+		go stepStateChangeHook(s)
 	}
 	return nil
 }
@@ -168,12 +185,38 @@ func (h configHeap) Remove(c *runningConfig) {
 	h = append(h[0:i], h[i+1:]...)
 }
 
+type configState int
+
+const (
+	configPendding configState = iota
+	configRunning
+	configCompleted
+	configFailed
+)
+
+func (s configState) String() string {
+	switch s {
+	case configPendding:
+		return "pendding"
+	case configRunning:
+		return "running"
+	case configCompleted:
+		return "completed"
+	case configFailed:
+		return "failed"
+	default:
+		return "wrong state"
+	}
+}
+
 type runningConfig struct {
 	lock         sync.Mutex
 	name         string
 	tasks        map[string]*step
 	StartTime    time.Time
 	completedNum int
+
+	state configState
 }
 
 func fromConfig(c *config.Config) *runningConfig {
@@ -181,6 +224,7 @@ func fromConfig(c *config.Config) *runningConfig {
 		name:      c.Name,
 		tasks:     make(map[string]*step),
 		StartTime: time.Now(),
+		state:     configPendding,
 	}
 
 	tasks := make(map[string]*step)
@@ -188,10 +232,14 @@ func fromConfig(c *config.Config) *runningConfig {
 		tasks[s.Name] = &step{
 			Step:  s,
 			c:     config,
-			state: pendding,
+			state: stepPendding,
 			wait:  make(map[string]struct{}),
 			next:  make(map[string]struct{}),
 		}
+	}
+
+	if configStateChangeHook != nil {
+		configStateChangeHook(config)
 	}
 
 	return config
@@ -222,6 +270,11 @@ func (c *runningConfig) Graph() ([]task.Task, error) {
 		}
 	}
 
+	c.state = configRunning
+	if configStateChangeHook != nil {
+		configStateChangeHook(c)
+	}
+
 	return avaliableTask, nil
 }
 
@@ -243,6 +296,11 @@ func (c *runningConfig) Complete(complete string) ([]task.Task, error) {
 		}
 	}
 
+	c.state = configCompleted
+	if configStateChangeHook != nil {
+		configStateChangeHook(c)
+	}
+
 	return c.newTask(avaliableTask)
 }
 
@@ -256,4 +314,25 @@ func (c *runningConfig) newTask(avaliableTask []string) (result []task.Task, err
 	}
 
 	return
+}
+
+func (c *runningConfig) Fail(fail string) (task.Task, error) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	failTask := c.tasks[fail]
+	if err := failTask.fail(); err != nil {
+		return nil, err
+	}
+
+	if failTask.Step.Retry > failTask.retryTimes {
+		failTask.retryTimes++
+		return failTask.newTask()
+	}
+
+	c.state = configFailed
+	if configStateChangeHook != nil {
+		configStateChangeHook(c)
+	}
+
+	return nil, nil
 }

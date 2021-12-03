@@ -6,6 +6,7 @@ import (
 	"log"
 	"path"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -66,9 +67,17 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 	go p.reloader()
 	go p.dispatcher(client)
 	etcdClient := client.GetOriginClient()
-	SetStatusChangeHook(func(s *step) {
+	SetStepStateChangeHook(func(s *step) {
 		_, err := etcdClient.Put(context.TODO(), path.Join("global", "running", s.c.name,
-			s.c.StartTime.Format(time.RFC1123), s.Name), ready.String())
+			s.c.StartTime.Format(time.RFC1123), s.Name+"-"+strconv.Itoa(s.retryTimes)), s.state.String())
+		if err != nil {
+			log.Println(err)
+		}
+	})
+
+	SetConfigStateChangeHook(func(c *runningConfig) {
+		_, err := etcdClient.Put(context.TODO(), path.Join("global", "running", c.name,
+			c.StartTime.Format(time.RFC1123)), c.state.String())
 		if err != nil {
 			log.Println(err)
 		}

@@ -28,7 +28,6 @@ type Config struct {
 		Steps []*Step           `yaml:"steps,omitempty"`
 	} `yaml:"jobs,omitempty"`
 
-
 	Upload string `yaml:"upload,omitempty"`
 }
 
@@ -46,6 +45,7 @@ func (s ScheduleConfig) IsEmapty() bool {
 type Step struct {
 	Name    string   `yaml:"name,omitempty"`
 	Run     string   `yaml:"run,omitempty"`
+	Retry   int      `yaml:"retry,omitempty"`
 	Lables  []string `yaml:"lables,omitempty"`
 	Depends []string `yaml:"depends,omitempty"`
 }
