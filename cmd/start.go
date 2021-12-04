@@ -4,7 +4,6 @@ import (
 	"net"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 
 	commandpb "github.com/silverswords/scheduler/api/scheduler/cmd"
@@ -66,8 +65,8 @@ var startCmd = &cobra.Command{
 		})
 
 		g.Add(func() error {
-			addr := viper.Get("grpc.addr").(string)
-			l, err := net.Listen("tcp", addr)
+			// addr := viper.Get("grpc.addr").(string)
+			l, err := net.Listen("tcp", ":8000")
 			if err != nil {
 				return err
 			}

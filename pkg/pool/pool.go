@@ -3,16 +3,18 @@ package pool
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"log"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	registrypb "github.com/silverswords/scheduler/api/registry"
 	commandpb "github.com/silverswords/scheduler/api/scheduler/cmd"
+	registrypb "github.com/silverswords/scheduler/api/scheduler/registry"
 	taskspb "github.com/silverswords/scheduler/api/tasks"
 	utilspb "github.com/silverswords/scheduler/api/utils"
+
 	workerpb "github.com/silverswords/scheduler/api/worker"
 	"github.com/silverswords/scheduler/pkg/api"
 	"github.com/silverswords/scheduler/pkg/config"
@@ -43,6 +45,9 @@ type Pool struct {
 	workers map[string]map[string]bool
 
 	taskspb.UnimplementedTasksServer
+	registrypb.UnimplementedRegistryServer
+	workerpb.UnimplementedWorkerServer
+	commandpb.UnimplementedCommandServer
 }
 
 // New creates a pool
@@ -61,6 +66,8 @@ func New() *Pool {
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
 		workers:       make(map[string]map[string]bool),
+		oldConfigs:    make(map[string]*config.Config),
+		configs:       make(map[string]*config.Config),
 	}
 }
 
@@ -101,12 +108,13 @@ func (p *Pool) CancelTask(ctx context.Context, in *commandpb.CancelRequest) (*ut
 	defer conn.Close()
 	c := workerpb.NewWorkerClient(conn)
 
-	_, err = c.CancelTask(context.Background(), &commandpb.CancelRequest{TaskName: taskName})
+	_, err = c.CancelTask(context.Background(), &workerpb.CancelRequest{TaskName: taskName})
 
+	log.Printf("cancel task: %v", taskName)
 	return &utilspb.Empty{}, nil
 }
 
-func (p *Pool) Registry(ctx context.Context, in *registrypb.RegistryRequest) (*utilspb.Empty, error) {
+func (p *Pool) Regist(ctx context.Context, in *registrypb.Request) (*utilspb.Empty, error) {
 	workerAddr := in.GetWorkerAddr()
 	labels := in.GetLabels()
 
@@ -120,6 +128,7 @@ func (p *Pool) Registry(ctx context.Context, in *registrypb.RegistryRequest) (*u
 	}
 	new[workerAddr][labels] = true
 
+	fmt.Println("new", new)
 	p.mu.Lock()
 	p.workers = new
 	log.Printf("update worker list: %v", p.workers)
@@ -283,10 +292,14 @@ func (p *Pool) Stop() {
 
 func (p *Pool) dispatcher(client *api.Client) {
 	for {
-		for len(p.workers) == 0 {
-			time.Sleep(5 * time.Second)
+		p.mu.Lock()
+		if len(p.workers) == 0 {
+			p.mu.Unlock()
 			log.Println("block for empty workers")
+			time.Sleep(5 * time.Second)
+			continue
 		}
+		p.mu.Unlock()
 
 		task := p.queue.Get().(*task.RemoteTask)
 		p.mu.RLock()
@@ -307,7 +320,7 @@ func (p *Pool) dispatcher(client *api.Client) {
 			defer conn.Close()
 			c := workerpb.NewWorkerClient(conn)
 
-			_, err = c.Run(context.Background(), workerpb.RunRequest{TaskName: task.Name})
+			_, err = c.Run(context.Background(), &workerpb.RunRequest{TaskName: task.Name})
 			if err != nil {
 				log.Println("deliver task failed, error: ", err)
 				continue

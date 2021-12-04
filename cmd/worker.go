@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"os"
 	"strings"
@@ -48,7 +47,6 @@ var workerCmd = &cobra.Command{
 		c := registrypb.NewRegistryClient(conn)
 
 		labels := strings.Join(config.Labels, "/")
-		fmt.Println(labels, "labels")
 		_, err = c.Regist(context.Background(), &registrypb.Request{WorkerAddr: "192.168.0.21:8000", Labels: labels})
 		if err != nil {
 			return err
