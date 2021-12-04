@@ -10,6 +10,8 @@ import (
 	"github.com/silverswords/scheduler/pkg/task"
 )
 
+const testWorkerName = "test"
+
 func initStepConfigPtr(steps map[string]*step, c *runningConfig) {
 	for _, step := range steps {
 		step.wait = make(map[string]struct{})
@@ -145,7 +147,7 @@ func TestRunningConfigComplete(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "basic",
+			name: "basic step1",
 			fields: fields{
 				name: "basic",
 				tasks: map[string]*step{
@@ -166,6 +168,7 @@ func TestRunningConfigComplete(t *testing.T) {
 			args: args{complete: "step1"},
 			prepare: func(c *runningConfig) {
 				c.Graph()
+				c.tasks["step1"].start("testWorkerName")
 			},
 			want: []task.Task{
 				&task.RemoteTask{
@@ -174,7 +177,7 @@ func TestRunningConfigComplete(t *testing.T) {
 			},
 		},
 		{
-			name: "basic",
+			name: "basic step2",
 			fields: fields{
 				name: "basic",
 				tasks: map[string]*step{
@@ -195,6 +198,7 @@ func TestRunningConfigComplete(t *testing.T) {
 			args: args{complete: "step1"},
 			prepare: func(c *runningConfig) {
 				c.Graph()
+				c.tasks["step1"].start("testWorkerName")
 				c.Complete("step1")
 			},
 			want:    nil,
@@ -222,7 +226,9 @@ func TestRunningConfigComplete(t *testing.T) {
 			args: args{complete: "step2"},
 			prepare: func(c *runningConfig) {
 				c.Graph()
+				c.tasks["step1"].start("testWorkerName")
 				c.Complete("step1")
+				c.tasks["step2"].start("testWorkerName")
 			},
 			want: nil,
 		},
@@ -264,6 +270,7 @@ func TestRunningConfigComplete(t *testing.T) {
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
+				c.tasks["step1-1"].start("testWorkerName")
 			},
 			args: args{complete: "step1-1"},
 			want: []task.Task{
@@ -310,6 +317,8 @@ func TestRunningConfigComplete(t *testing.T) {
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
+				c.tasks["step1-1"].start(testWorkerName)
+				c.tasks["step1-2"].start(testWorkerName)
 				c.Complete("step1-1")
 			},
 			args: args{complete: "step1-2"},
@@ -360,6 +369,7 @@ func TestRunningConfigComplete(t *testing.T) {
 			},
 			prepare: func(c *runningConfig) {
 				c.Graph()
+				c.tasks["step1-2"].start(testWorkerName)
 			},
 			args: args{complete: "step1-2"},
 			want: []task.Task{
@@ -382,13 +392,34 @@ func TestRunningConfigComplete(t *testing.T) {
 
 			got, err := c.Complete(tt.args.complete)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("runningConfig.Complete() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("name %s,runningConfig.Complete() error = %v, wantErr %v", tt.name, err, tt.wantErr)
 				return
 			}
 
-			if !reflect.DeepEqual(got, tt.want) {
+			if !RemoteTaskEqual(got, tt.want) {
 				t.Errorf("name %s, runningConfig.Complete() = %v, want %v", tt.name, got, tt.want)
 			}
 		})
 	}
+}
+
+func RemoteTaskEqual(tasks1, tasks2 []task.Task) bool {
+	if len(tasks1) != len(tasks2) {
+		return false
+	}
+
+	for _, t1 := range tasks1 {
+		flag := false
+		for i, t2 := range tasks2 {
+			if reflect.DeepEqual(t1, t2) {
+				flag = true
+				tasks2 = append(tasks2[0:i], tasks2[i+1:]...)
+			}
+		}
+		if !flag {
+			return false
+		}
+	}
+
+	return true
 }

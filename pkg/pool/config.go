@@ -31,11 +31,9 @@ const completed stepState = "completed"
 
 type step struct {
 	*config.Step
-
 	c *runningConfig
 
 	state         stepState
-	completed     bool
 	wait          map[string]struct{}
 	next          map[string]struct{}
 	runningWorker string
@@ -177,7 +175,10 @@ func (c *runningConfig) Complete(complete string) ([]task.Task, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	completeTask := c.tasks[complete]
-	completeTask.completed = true
+	if err := completeTask.complete(); err != nil {
+		return nil, err
+	}
+
 	avaliableTask := []string{}
 
 	for task := range completeTask.next {
