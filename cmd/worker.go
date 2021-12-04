@@ -3,13 +3,16 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"os"
-	"time"
+	"strings"
 
-	"github.com/silverswords/scheduler/pkg/util"
-	"github.com/silverswords/scheduler/pkg/worker"
+	registrypb "github.com/silverswords/scheduler/api/scheduler/registry"
+	workerpb "github.com/silverswords/scheduler/api/worker"
+	"github.com/silverswords/scheduler/pkg/pool"
 	"github.com/spf13/cobra"
-	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -37,28 +40,32 @@ var workerCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure(), grpc.WithBlock())
+		conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure())
 		if err != nil {
 			return err
 		}
 		defer conn.Close()
 		c := registrypb.NewRegistryClient(conn)
 
-		_, err = c.Regist(context.Background(), &registrypb.RegistryRequest{WorkerAddr: , Labels: })
+		labels := strings.Join(config.Labels, "/")
+		fmt.Println(labels, "labels")
+		_, err = c.Regist(context.Background(), &registrypb.Request{WorkerAddr: "192.168.0.21:8000", Labels: labels})
+		if err != nil {
+			return err
+		}
+		l, err := net.Listen("tcp", "192.168.0.21:4000")
+		if err != nil {
+			return err
+		}
 
-		
+		grpcServer := grpc.NewServer()
+		worker, err := pool.NewWorker()
+		if err != nil {
+			return err
+		}
+		workerpb.RegisterWorkerServer(grpcServer, worker)
 
-		addr := viper.Get("grpc.addr").(string)
-			l, err := net.Listen("tcp", addr)
-			if err != nil {
-				return err
-			}
-
-			registrypb.RegisterRegistryServer(grpcServer, scheduler)
-			taskspb.RegisterTasksServer(grpcServer, scheduler)
-			commandpb.RegisterCommandServer(grpcServer, scheduler)
-
-			return grpcServer.Serve(l)
+		return grpcServer.Serve(l)
 
 		// endpoints, err := util.GetEndpoints()
 		// if err != nil {

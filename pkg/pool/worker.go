@@ -5,7 +5,7 @@ import (
 	"log"
 
 	utilspb "github.com/silverswords/scheduler/api/utils"
-	workerpb "github.com/silverswords/scheduler/api/workerpb"
+	workerpb "github.com/silverswords/scheduler/api/worker"
 	"github.com/silverswords/scheduler/pkg/task"
 	"gopkg.in/yaml.v2"
 )
@@ -13,22 +13,16 @@ import (
 type Worker struct {
 	Addr   string
 	Labels []string
+
+	*workerpb.UnimplementedWorkerServer
 }
 
 // New create a new worker
-func NewWorker(config *WorkerConfig) (*Worker, error) {
-	// configBytes, err := Marshal(config)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	return &Worker{
-		Addr:   config.Addr,
-		Labels: config.Labels,
-	}, nil
+func NewWorker() (*Worker, error) {
+	return &Worker{}, nil
 }
 
-func (w *Worker) Run(ctx context.Context, in *workerpb.WorkerRequest) (*utilspb.Empty, error) {
+func (w *Worker) Run(ctx context.Context, in *workerpb.RunRequest) (*utilspb.Empty, error) {
 	taskName := in.GetTaskName()
 
 	remoteTask, err := UnmarshalRemoteTask(ctx, []byte(taskName))
@@ -57,7 +51,7 @@ func (w *Worker) Run(ctx context.Context, in *workerpb.WorkerRequest) (*utilspb.
 	return &utilspb.Empty{}, nil
 }
 
-func (w *Worker) CancelTask(ctx context.Context, in *workerpb.WorkerRequest) (*utilspb.Empty, error) {
+func (w *Worker) CancelTask(ctx context.Context, in *workerpb.CancelRequest) (*utilspb.Empty, error) {
 	taskName := in.GetTaskName()
 
 	log.Println("cancel task: ", taskName)
@@ -66,8 +60,8 @@ func (w *Worker) CancelTask(ctx context.Context, in *workerpb.WorkerRequest) (*u
 }
 
 type WorkerConfig struct {
-	Addr   string
-	Labels []string
+	Addr   string   `yaml:"addr"`
+	Labels []string `yaml:"labels"`
 }
 
 func Unmarshal(data []byte) (*WorkerConfig, error) {

@@ -13,7 +13,7 @@ service Worker {
 }
 
 message RunRequest {
-    bytes Task = 1 [(gogoproto.nullable) = false];
+    string TaskName = 1 [(gogoproto.nullable) = false];
 }
 
 message CancelRequest {
