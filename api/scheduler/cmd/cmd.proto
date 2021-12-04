@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package scheduler.cmd;
+
+import weak "gogoproto/gogo.proto";
+import "api/utils/empty.proto";
+
+option go_package = "github.com/silverswords/scheduler/api/cmd";
+
+service Command {
+    rpc ApplyConfig(ApplyRequest) returns (scheduler.utils.Empty);
+    rpc CancelTask(CancelRequest) returns (scheduler.utils.Empty);
+    rpc DeleteConfig(DeleteRequest) returns (scheduler.utils.Empty);
+}
+
+message ApplyRequest {
+    bytes ConfigName = 1 [(gogoproto.nullable) = false];
+}
+
+message CancelRequest {
+    string TaskName = 1 [(gogoproto.nullable) = false];
+}
+
+message DeleteRequest {
+    string ConfigName = 1 [(gogoproto.nullable) = false];
+}

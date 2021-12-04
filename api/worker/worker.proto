@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package scheduler.tasks;
+package scheduler.worker;
 
 import weak "gogoproto/gogo.proto";
 import "api/utils/empty.proto";
@@ -8,11 +8,11 @@ import "api/utils/empty.proto";
 option go_package = "github.com/silverswords/scheduler/api/worker";
 
 service Worker {
-    rpc DeliverTask(DeliverRequest) returns (scheduler.utils.Empty);
+    rpc Run(RunRequest) returns (scheduler.utils.Empty);
     rpc CancelTask(CancelRequest) returns (scheduler.utils.Empty);
 }
 
-message DeliverRequest {
+message RunRequest {
     string name = 1 [(gogoproto.nullable) = false];
 }
 
