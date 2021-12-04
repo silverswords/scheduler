@@ -1,15 +1,13 @@
 package cmd
 
 import (
-	"bytes"
+	"context"
 	"errors"
-	"fmt"
-	"net/http"
 	"os"
 
-	"github.com/silverswords/scheduler/pkg/config"
-	"github.com/silverswords/scheduler/pkg/util"
+	commandpb "github.com/silverswords/scheduler/api/scheduler/cmd"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -33,31 +31,39 @@ var applyCmd = &cobra.Command{
 			return err
 		}
 
-		config, err := config.Unmarshal(data)
+		// addr, err := util.GetServerAddr()
+		// if err != nil {
+		// 	return err
+		// }
+
+		// port, err := util.GetServerPort()
+		// if err != nil {
+		// 	return err
+		// }
+
+		conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
+		c := commandpb.NewCommandClient(conn)
 
-		url, err := util.GetURL()
-		if err != nil {
-			return err
-		}
+		_, err = c.ApplyConfig(context.Background(), &commandpb.ApplyRequest{ConfigName: data})
 
-		body := fmt.Sprintf(`{
-			"key":"%s",
-			"config":"%s"
-			}`, config.Name, string(data))
+		return err
+		// body := fmt.Sprintf(`{
+		// 	"key":"%s",
+		// 	"config":"%s"
+		// 	}`, config.Name, string(data))
 
-		req, err := http.NewRequest("POST", url+applyPath, bytes.NewBuffer([]byte(body)))
-		if err != nil {
-			return err
-		}
-		client := &http.Client{}
-		_, err = client.Do(req)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		// req, err := http.NewRequest("POST", addr+":"+port+applyPath, bytes.NewBuffer([]byte(body)))
+		// if err != nil {
+		// 	return err
+		// }
+		// client := &http.Client{}
+		// _, err = client.Do(req)
+		// if err != nil {
+		// 	return err
+		// }
 	},
 }

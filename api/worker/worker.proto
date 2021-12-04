@@ -13,9 +13,9 @@ service Worker {
 }
 
 message RunRequest {
-    string name = 1 [(gogoproto.nullable) = false];
+    bytes Task = 1 [(gogoproto.nullable) = false];
 }
 
 message CancelRequest {
-    string name = 1 [(gogoproto.nullable) = false];
+    string TaskName = 1 [(gogoproto.nullable) = false];
 }

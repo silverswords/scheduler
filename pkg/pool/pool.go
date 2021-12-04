@@ -5,14 +5,20 @@ import (
 	"context"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
+	registrypb "github.com/silverswords/scheduler/api/registry"
+	commandpb "github.com/silverswords/scheduler/api/scheduler/cmd"
 	taskspb "github.com/silverswords/scheduler/api/tasks"
+	utilspb "github.com/silverswords/scheduler/api/utils"
+	workerpb "github.com/silverswords/scheduler/api/worker"
 	"github.com/silverswords/scheduler/pkg/api"
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/schedule"
 	"github.com/silverswords/scheduler/pkg/task"
+	"google.golang.org/grpc"
 )
 
 // Pool is the core of the scheduler
@@ -58,8 +64,72 @@ func New() *Pool {
 	}
 }
 
+func (p *Pool) ApplyConfig(ctx context.Context, in *commandpb.ApplyRequest) (*utilspb.Empty, error) {
+	configName := in.GetConfigName()
+	config, err := config.Unmarshal(configName)
+	if err != nil {
+		return &utilspb.Empty{}, err
+	}
+
+	p.mu.Lock()
+	p.oldConfigs = p.configs
+	p.configs[config.Name] = config
+	log.Printf("apply config: %v", config)
+	p.mu.Unlock()
+
+	return &utilspb.Empty{}, nil
+}
+
+func (p *Pool) DeleteConfig(ctx context.Context, in *commandpb.DeleteRequest) (*utilspb.Empty, error) {
+	configName := in.GetConfigName()
+
+	p.mu.Lock()
+	delete(p.configs, configName)
+	log.Printf("delete config: %v", configName)
+	p.mu.Unlock()
+
+	return &utilspb.Empty{}, nil
+}
+
+func (p *Pool) CancelTask(ctx context.Context, in *commandpb.CancelRequest) (*utilspb.Empty, error) {
+	taskName := in.GetTaskName()
+
+	conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		return &utilspb.Empty{}, err
+	}
+	defer conn.Close()
+	c := workerpb.NewWorkerClient(conn)
+
+	_, err = c.CancelTask(context.Background(), &commandpb.CancelRequest{TaskName: taskName})
+
+	return &utilspb.Empty{}, nil
+}
+
+func (p *Pool) Registry(ctx context.Context, in *registrypb.RegistryRequest) (*utilspb.Empty, error) {
+	workerAddr := in.GetWorkerAddr()
+	labels := in.GetLabels()
+
+	new := make(map[string]map[string]bool)
+	new[workerAddr] = make(map[string]bool)
+	for strings.ContainsAny(labels, "/") {
+		index := strings.IndexByte(labels, '/')
+		label := labels[:index]
+		new[workerAddr][label] = true
+		labels = labels[index+1:]
+	}
+	new[workerAddr][labels] = true
+
+	p.mu.Lock()
+	p.workers = new
+	log.Printf("update worker list: %v", p.workers)
+	p.mu.Unlock()
+
+	return &utilspb.Empty{}, nil
+}
+
 // Run -
-func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config, workers <-chan map[string]interface{}) {
+func (p *Pool) Run(client *api.Client) {
 	p.isRunning = true
 	go p.reloader()
 	go p.dispatcher(client)
@@ -114,42 +184,36 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 				log.Printf("recaculate timer, next task is %s, next run after %s\n", sche.Name(), time.Until(sche.Next()))
 			}
 
-		case new := <-configs:
-			newConfigs := make(map[string]*config.Config)
-			for k, v := range new {
-				newConfigs[k] = v
-			}
+		// case new := <-configs:
+		// 	newConfigs := make(map[string]*config.Config)
+		// 	for k, v := range new {
+		// 		newConfigs[k] = v
+		// 	}
 
-			p.setConfig(newConfigs)
-			select {
-			case p.triggerReload <- struct{}{}:
-			default:
-			}
+		// 	p.setConfig(newConfigs)
+		// 	select {
+		// 	case p.triggerReload <- struct{}{}:
+		// 	default:
+		// 	}
 
-		case newWorkers := <-workers:
-			p.mu.Lock()
-			new := make(map[string]map[string]bool)
-			for k, v := range newWorkers {
-				new[k] = make(map[string]bool)
-				for _, lable := range v.([]string) {
-					new[k][lable] = true
-				}
-			}
+		// case newWorkers := <-workers:
+		// 	p.mu.Lock()
+		// 	new := make(map[string]map[string]bool)
+		// 	for k, v := range newWorkers {
+		// 		new[k] = make(map[string]bool)
+		// 		for _, lable := range v.([]string) {
+		// 			new[k][lable] = true
+		// 		}
+		// 	}
 
-			p.workers = new
-			log.Printf("update worker list: %v", p.workers)
-			p.mu.Unlock()
+		// 	p.workers = new
+		// 	log.Printf("update worker list: %v", p.workers)
+		// 	p.mu.Unlock()
 
 		case <-p.stop:
 			return
 		}
 	}
-}
-
-func (p *Pool) setConfig(configs map[string]*config.Config) {
-	p.mu.Lock()
-	p.oldConfigs, p.configs = p.configs, configs
-	p.mu.Unlock()
 }
 
 func (p *Pool) reloader() {
@@ -236,7 +300,14 @@ func (p *Pool) dispatcher(client *api.Client) {
 		}
 
 		for _, worker := range workers {
-			err := client.DeliverTask(context.Background(), worker, task)
+			conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure(), grpc.WithBlock())
+			if err != nil {
+				continue
+			}
+			defer conn.Close()
+			c := workerpb.NewWorkerClient(conn)
+
+			_, err = c.Run(context.Background(), workerpb.RunRequest{TaskName: task.Name})
 			if err != nil {
 				log.Println("deliver task failed, error: ", err)
 				continue

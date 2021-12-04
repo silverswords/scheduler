@@ -33,29 +33,51 @@ var workerCmd = &cobra.Command{
 			return err
 		}
 
-		config, err := worker.Unmarshal(data)
+		config, err := pool.Unmarshal(data)
 		if err != nil {
 			return err
 		}
-
-		endpoints, err := util.GetEndpoints()
+		conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
+		c := registrypb.NewRegistryClient(conn)
 
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   endpoints,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
+		_, err = c.Regist(context.Background(), &registrypb.RegistryRequest{WorkerAddr: , Labels: })
 
-		worker, err := worker.New(config)
-		if err != nil {
-			return err
-		}
+		
 
-		return worker.Run(context.TODO(), client)
+		addr := viper.Get("grpc.addr").(string)
+			l, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+
+			registrypb.RegisterRegistryServer(grpcServer, scheduler)
+			taskspb.RegisterTasksServer(grpcServer, scheduler)
+			commandpb.RegisterCommandServer(grpcServer, scheduler)
+
+			return grpcServer.Serve(l)
+
+		// endpoints, err := util.GetEndpoints()
+		// if err != nil {
+		// 	return err
+		// }
+
+		// client, err := clientv3.New(clientv3.Config{
+		// 	Endpoints:   endpoints,
+		// 	DialTimeout: 5 * time.Second,
+		// })
+		// if err != nil {
+		// 	return err
+		// }
+
+		// worker, err := worker.New(config)
+		// if err != nil {
+		// 	return err
+		// }
+
+		// return worker.Run(context.TODO(), client)
 	},
 }

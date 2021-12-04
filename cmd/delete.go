@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"bytes"
+	"context"
 	"errors"
-	"fmt"
-	"net/http"
-	"os"
 
-	"github.com/silverswords/scheduler/pkg/config"
-	"github.com/silverswords/scheduler/pkg/util"
+	commandpb "github.com/silverswords/scheduler/api/scheduler/cmd"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -27,36 +24,46 @@ var deleteCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		configPath := args[0]
-		data, err := os.ReadFile(configPath)
+		configName := args[0]
+		// data, err := os.ReadFile(configPath)
+		// if err != nil {
+		// 	return err
+		// }
+
+		// config, err := config.Unmarshal(data)
+		// if err != nil {
+		// 	return err
+		// }
+
+		// url, err := util.GetURL()
+		// if err != nil {
+		// 	return err
+		// }
+
+		conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
 			return err
 		}
+		defer conn.Close()
+		c := commandpb.NewCommandClient(conn)
 
-		config, err := config.Unmarshal(data)
-		if err != nil {
-			return err
-		}
+		_, err = c.DeleteConfig(context.Background(), &commandpb.DeleteRequest{ConfigName: configName})
 
-		url, err := util.GetURL()
-		if err != nil {
-			return err
-		}
+		return err
+		// body := fmt.Sprintf(`{
+		// 	"config_name":"%s"
+		// 	}`, config.Name)
 
-		body := fmt.Sprintf(`{
-			"config_name":"%s"
-			}`, config.Name)
+		// req, err := http.NewRequest("POST", url+deletePath, bytes.NewBuffer([]byte(body)))
+		// if err != nil {
+		// 	return err
+		// }
+		// client := &http.Client{}
+		// _, err = client.Do(req)
+		// if err != nil {
+		// 	return err
+		// }
 
-		req, err := http.NewRequest("POST", url+deletePath, bytes.NewBuffer([]byte(body)))
-		if err != nil {
-			return err
-		}
-		client := &http.Client{}
-		_, err = client.Do(req)
-		if err != nil {
-			return err
-		}
-
-		return nil
+		// return nil
 	},
 }
