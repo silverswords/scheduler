@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package scheduler.registry;
+
+import weak "gogoproto/gogo.proto";
+import "api/utils/empty.proto";
+
+option go_package = "github.com/silverswords/scheduler/api/registry";
+
+service Registry {
+    rpc Regist(Request) returns (scheduler.utils.Empty);
+}
+
+message Request {
+    string worker_addr = 1 [(gogoproto.nullable) = false];
+    string labels = 2 [(gogoproto.nullable) = false];
+}

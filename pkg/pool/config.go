@@ -96,7 +96,7 @@ func (s *step) newTask() (task.Task, error) {
 	}
 
 	return &task.RemoteTask{
-		Name: strings.Join([]string{strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
+		Name: strings.Join([]string{strconv.FormatInt(s.c.startTime.UnixNano(), 10), s.c.name, s.Name}, nameSeparator),
 	}, nil
 }
 

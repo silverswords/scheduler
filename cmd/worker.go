@@ -3,13 +3,15 @@ package cmd
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
-	"time"
+	"strings"
 
-	"github.com/silverswords/scheduler/pkg/util"
-	"github.com/silverswords/scheduler/pkg/worker"
+	registrypb "github.com/silverswords/scheduler/api/scheduler/registry"
+	workerpb "github.com/silverswords/scheduler/api/worker"
+	"github.com/silverswords/scheduler/pkg/pool"
 	"github.com/spf13/cobra"
-	clientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -33,29 +35,54 @@ var workerCmd = &cobra.Command{
 			return err
 		}
 
-		config, err := worker.Unmarshal(data)
+		config, err := pool.Unmarshal(data)
+		if err != nil {
+			return err
+		}
+		conn, err := grpc.Dial("192.168.0.21:8000", grpc.WithInsecure())
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		c := registrypb.NewRegistryClient(conn)
+
+		labels := strings.Join(config.Labels, "/")
+		_, err = c.Regist(context.Background(), &registrypb.Request{WorkerAddr: "192.168.0.21:8000", Labels: labels})
+		if err != nil {
+			return err
+		}
+		l, err := net.Listen("tcp", "192.168.0.21:4000")
 		if err != nil {
 			return err
 		}
 
-		endpoints, err := util.GetEndpoints()
+		grpcServer := grpc.NewServer()
+		worker, err := pool.NewWorker()
 		if err != nil {
 			return err
 		}
+		workerpb.RegisterWorkerServer(grpcServer, worker)
 
-		client, err := clientv3.New(clientv3.Config{
-			Endpoints:   endpoints,
-			DialTimeout: 5 * time.Second,
-		})
-		if err != nil {
-			return err
-		}
+		return grpcServer.Serve(l)
 
-		worker, err := worker.New(config)
-		if err != nil {
-			return err
-		}
+		// endpoints, err := util.GetEndpoints()
+		// if err != nil {
+		// 	return err
+		// }
 
-		return worker.Run(context.TODO(), client)
+		// client, err := clientv3.New(clientv3.Config{
+		// 	Endpoints:   endpoints,
+		// 	DialTimeout: 5 * time.Second,
+		// })
+		// if err != nil {
+		// 	return err
+		// }
+
+		// worker, err := worker.New(config)
+		// if err != nil {
+		// 	return err
+		// }
+
+		// return worker.Run(context.TODO(), client)
 	},
 }
