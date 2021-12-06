@@ -3,14 +3,21 @@ package task
 import (
 	"context"
 	"errors"
-	"time"
+	"fmt"
+	"log"
+	"os/exec"
 
-	"gopkg.in/yaml.v2"
+	taskspb "github.com/silverswords/scheduler/api/tasks"
 )
 
 // Task represents the function that really needs to be executed
 type Task interface {
 	Do(context.Context) error
+}
+
+type CanclableTask interface {
+	Task
+	Cancle() error
 }
 
 // taskFunc is the most basic implementation of task
@@ -26,42 +33,39 @@ func (t taskFunc) Do(ctx context.Context) error {
 	return t(ctx)
 }
 
-// RemoteTask is used to transmit task information based on bytes
-type RemoteTask struct {
-	Name      string    `json:"name,omitempty"`
-	StartTime time.Time `json:"start_time,omitempty"`
-	Err       error     `json:"err,omitempty"`
-	Done      bool      `json:"done,omitempty"`
-	Priority  int
-	Lables    []string
-	t         Task
+type commandTask struct {
+	info *taskspb.TaskInfo
+	cmd  *exec.Cmd
 }
 
-// Do executes remoteTask and markes it as execution complete
-func (t *RemoteTask) Do(ctx context.Context) error {
-	if t.t == nil {
-		return errors.New("run SetTask() before call Do()")
-	}
-	if err := t.t.Do(ctx); err != nil {
-		t.Err = err
+func NewCommandTask(info *taskspb.TaskInfo) Task {
+	cmd := exec.Command(info.Cmd, info.Args...)
+	for k, v := range info.Envs {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
 
-	t.Done = true
-
-	return t.Err
+	return &commandTask{
+		info,
+		cmd,
+	}
 }
 
-// SetTask set the inner task of remoteTask
-func (t *RemoteTask) SetTask(task Task) {
-	t.t = task
+func (t *commandTask) Do(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return errors.New("task has be cancled")
+	default:
+	}
+
+	output, err := t.cmd.Output()
+	if err != nil {
+		return fmt.Errorf("new task failed: %v", err)
+	}
+
+	log.Print(string(output))
+	return nil
 }
 
-// Encode encodes remoteTask into byte slices
-func (t *RemoteTask) Encode() ([]byte, error) {
-	return yaml.Marshal(t)
-}
-
-// Decode decode remoteTask from byte slice
-func (t *RemoteTask) Decode(data []byte) error {
-	return yaml.Unmarshal(data, t)
+func (t *commandTask) Cancle() error {
+	return t.cmd.Process.Kill()
 }

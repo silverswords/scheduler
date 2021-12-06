@@ -7,6 +7,7 @@ import (
 	"time"
 
 	workerpb "github.com/silverswords/scheduler/api/worker"
+	"github.com/silverswords/scheduler/pkg/task"
 	"github.com/silverswords/scheduler/pkg/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
@@ -19,6 +20,7 @@ type Worker struct {
 
 	c *Config
 
+	running map[string]task.Task
 	workerpb.UnimplementedWorkerServer
 }
 
