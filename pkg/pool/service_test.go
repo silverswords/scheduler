@@ -13,7 +13,7 @@ import (
 )
 
 type mockService struct {
-	taskspb.UnimplementedTasksServer
+	taskspb.UnimplementedStateChangeServer
 }
 
 func TestSerive(t *testing.T) {
@@ -25,7 +25,7 @@ func TestSerive(t *testing.T) {
 
 		grpcServer := grpc.NewServer()
 
-		taskspb.RegisterTasksServer(grpcServer, &mockService{})
+		taskspb.RegisterStateChangeServer(grpcServer, &mockService{})
 
 		if err := grpcServer.Serve(l); err != nil {
 			log.Fatalf("failed to serve: %v", err)
@@ -40,7 +40,7 @@ func TestSerive(t *testing.T) {
 
 	defer conn.Close()
 
-	tasksClient := taskspb.NewTasksClient(conn)
+	tasksClient := taskspb.NewStateChangeClient(conn)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()

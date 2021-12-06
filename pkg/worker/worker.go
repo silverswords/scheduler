@@ -2,51 +2,38 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"log"
+	"net"
 	"time"
 
-	"github.com/silverswords/scheduler/pkg/task"
+	workerpb "github.com/silverswords/scheduler/api/worker"
 	"github.com/silverswords/scheduler/pkg/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
-	"gopkg.in/yaml.v2"
+	"google.golang.org/grpc"
 )
-
-type WorkerConfig struct {
-	Name   string
-	Lables []string
-}
-
-func Unmarshal(data []byte) (*WorkerConfig, error) {
-	c := &WorkerConfig{}
-
-	if err := yaml.Unmarshal(data, c); err != nil {
-		return nil, err
-	}
-
-	return c, nil
-}
-
-func Marshal(c *WorkerConfig) ([]byte, error) {
-	return yaml.Marshal(c)
-}
 
 // Worker is what the task actually handles
 type Worker struct {
-	name   string
-	config string
+	name      string
+	configStr string
+
+	c *Config
+
+	workerpb.UnimplementedWorkerServer
 }
 
 // New create a new worker
-func New(config *WorkerConfig) (*Worker, error) {
+func New(config *Config) (*Worker, error) {
 	configBytes, err := Marshal(config)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Worker{
-		name:   config.Name,
-		config: string(configBytes),
+		name:      config.Name,
+		configStr: string(configBytes),
+
+		c: config,
 	}, nil
 }
 
@@ -59,17 +46,12 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 		return err
 	}
 
-	taskPrefix, err := util.GetTaskDispatchPrefix()
-	if err != nil {
-		return err
-	}
-
 	workerPrefix, err := util.GetWorkerDiscoverPrefix()
 	if err != nil {
 		return err
 	}
 
-	_, err = client.Put(ctx, workerPrefix+w.name, w.config, clientv3.WithLease(leaseResponse.ID))
+	_, err = client.Put(ctx, workerPrefix+w.name, w.configStr, clientv3.WithLease(leaseResponse.ID))
 	if err != nil {
 		return err
 	}
@@ -84,52 +66,14 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 		}
 	}()
 
-	watchCh := client.Watch(ctx, taskPrefix+w.name, clientv3.WithPrefix())
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case response, ok := <-watchCh:
-			if !ok {
-				log.Println("watch channel closed")
-				return errors.New("watch channel closed")
-			}
-
-			for _, event := range response.Events {
-				remoteTask, err := UnmarshalRemoteTask(ctx, client, event.Kv.Value)
-				if err != nil {
-					log.Printf("can't unmarshal remote task, err: %s\n", err)
-					continue
-				}
-
-				if remoteTask.Done {
-					continue
-				}
-
-				go func() {
-					if err := remoteTask.Do(ctx); err != nil {
-						log.Printf("task %s err: %s\n", remoteTask.Name, err)
-					}
-
-					value, err := remoteTask.Encode()
-					if err != nil {
-						log.Printf("can't not marshal remoteTask")
-						return
-					}
-					client.Put(ctx, string(event.Kv.Key), string(value))
-				}()
-				log.Printf("doing task %s\n", remoteTask.Name)
-			}
-		}
+	l, err := net.Listen("tcp", w.c.Addr)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
 	}
-}
 
-// UnmarshalRemoteTask parses the remoteTask from the byte slice,
-// gets configuration information from etcd, and generates the task.
-func UnmarshalRemoteTask(ctx context.Context, client *clientv3.Client, value []byte) (*task.RemoteTask, error) {
-	var remoteTask task.RemoteTask
-	remoteTask.Decode(value)
+	grpcServer := grpc.NewServer()
 
-	return &remoteTask, nil
+	workerpb.RegisterWorkerServer(grpcServer, w)
+
+	return grpcServer.Serve(l)
 }

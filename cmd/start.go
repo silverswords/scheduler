@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/discover"
 	"github.com/silverswords/scheduler/pkg/pool"
-	"github.com/silverswords/scheduler/pkg/server"
 	"github.com/silverswords/scheduler/pkg/util"
 	"github.com/silverswords/scheduler/pkg/worker"
 )
@@ -61,15 +61,16 @@ var startCmd = &cobra.Command{
 			if err != nil {
 				return nil, err
 			}
-			return config.Lables, nil
+			return config, nil
 		})
+
 		var g util.Group
 		scheduler := pool.New()
 		configContext, configCancleFunc := context.WithCancel(context.Background())
 		workerContext, workerCancleFunc := context.WithCancel(context.Background())
 
 		grpcServer := grpc.NewServer()
-		configCh := make(chan map[string]*config.Config)
+
 		g.Add(func() error {
 			return configDiscover.Run(configContext, client.GetOriginClient())
 		}, func(err error) {
@@ -85,13 +86,15 @@ var startCmd = &cobra.Command{
 		})
 
 		g.Add(func() error {
-			server.Start(configCh)
-			return nil
+			// server.Start(configCh)
+			// return errors.New("server exit")
+			for {
+			}
 		}, func(err error) {})
 
 		g.Add(func() error {
-			scheduler.Run(client, configCh, workerDiscover.SyncCh())
-			return nil
+			scheduler.Run(client, configDiscover.SyncCh(), workerDiscover.SyncCh())
+			return errors.New("scheduler pool exit")
 		}, func(err error) {
 			scheduler.Stop()
 		})
@@ -103,7 +106,7 @@ var startCmd = &cobra.Command{
 				return err
 			}
 
-			taskspb.RegisterTasksServer(grpcServer, scheduler)
+			taskspb.RegisterStateChangeServer(grpcServer, scheduler)
 
 			return grpcServer.Serve(l)
 		}, func(err error) {

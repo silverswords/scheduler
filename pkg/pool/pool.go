@@ -14,7 +14,7 @@ import (
 	"github.com/silverswords/scheduler/pkg/api"
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/schedule"
-	"github.com/silverswords/scheduler/pkg/task"
+	"github.com/silverswords/scheduler/pkg/worker"
 )
 
 // Pool is the core of the scheduler
@@ -37,17 +37,17 @@ type Pool struct {
 	triggerReload chan struct{}
 	syncCh        chan struct{}
 
-	workers map[string]map[string]bool
+	workers map[string]*innerWorker
 
-	taskspb.UnimplementedTasksServer
+	taskspb.UnimplementedStateChangeServer
 }
 
 // New creates a pool
 func New() *Pool {
 	queue := NewQueue()
 	queue.SetCompareFunc( // CompareByPriority is the Less function used priority
-		CompareFunc(func(t1, t2 task.Task) bool {
-			return t1.(*task.RemoteTask).Priority < t2.(*task.RemoteTask).Priority
+		CompareFunc(func(t1, t2 *taskspb.TaskInfo) bool {
+			return t1.Priority < t2.Priority
 		}),
 	)
 
@@ -57,12 +57,12 @@ func New() *Pool {
 		stop:          make(chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
-		workers:       make(map[string]map[string]bool),
+		workers:       make(map[string]*innerWorker),
 	}
 }
 
 // Run -
-func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config, workers <-chan map[string]interface{}) {
+func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, workers <-chan map[string]interface{}) {
 	p.isRunning = true
 	go p.reloader()
 	go p.dispatcher(client)
@@ -94,7 +94,6 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 
 			p.runningMu.Lock()
 			heap.Push(p.runningConfig, running)
-
 			tasks, err := running.Graph()
 			p.runningMu.Unlock()
 
@@ -142,7 +141,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 		case new := <-configs:
 			newConfigs := make(map[string]*config.Config)
 			for k, v := range new {
-				newConfigs[k] = v
+				newConfigs[k] = v.(*config.Config)
 			}
 
 			p.setConfig(newConfigs)
@@ -152,13 +151,19 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]*config.Config,
 			}
 
 		case newWorkers := <-workers:
-			new := make(map[string]map[string]bool)
+			new := make(map[string]*innerWorker)
 			for k, v := range newWorkers {
-				new[k] = make(map[string]bool)
-				for _, lable := range v.([]string) {
-					new[k][lable] = true
+				w, ok := p.workers[k]
+				if !ok {
+					var err error
+					w, err = newWorker(v.(*worker.Config))
+					if err != nil {
+						continue
+					}
 				}
+				new[k] = w
 			}
+
 			p.mu.Lock()
 			p.workers = new
 			log.Printf("update worker list: %v", p.workers)
@@ -248,7 +253,7 @@ func (p *Pool) dispatcher(client *api.Client) {
 			log.Println("block for empty workers")
 		}
 
-		task := p.queue.Get().(*task.RemoteTask)
+		task := p.queue.Get()
 		p.mu.RLock()
 		workers := filterWokers(task.Lables, p.workers)
 		p.mu.RUnlock()
@@ -260,31 +265,30 @@ func (p *Pool) dispatcher(client *api.Client) {
 		}
 
 		for _, worker := range workers {
-			err := client.DeliverTask(context.Background(), worker, task)
-			if err != nil {
-				log.Println("deliver task failed, error: ", err)
+			if err := worker.deliver(task); err != nil {
+				log.Printf("deliver task fail, worker: %s, task: %s, error: %v\n", worker.config.Name, task.Name, err)
 				continue
 			}
-
-			log.Printf("deliver task success, worker: %s, task: %s", worker, task.Name)
+			p.queue.Done(task)
+			log.Printf("deliver task success, worker: %s, task: %s\n", worker.config.Name, task.Name)
 			break
 		}
 	}
 
 }
 
-func filterWokers(lables []string, worker map[string]map[string]bool) []string {
-	result := []string{}
-	for k, v := range worker {
+func filterWokers(lables []string, workers map[string]*innerWorker) []*innerWorker {
+	result := []*innerWorker{}
+	for _, worker := range workers {
 		flag := true
 		for _, lable := range lables {
-			if !v[lable] {
+			if !worker.lables[lable] {
 				flag = false
 				break
 			}
 		}
 		if flag {
-			result = append(result, k)
+			result = append(result, worker)
 		}
 	}
 

@@ -1,11 +1,12 @@
 package cmd
 
 import (
-	"bytes"
+	"context"
 	"errors"
-	"fmt"
-	"net/http"
 	"os"
+	"time"
+
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/util"
@@ -38,23 +39,27 @@ var applyCmd = &cobra.Command{
 			return err
 		}
 
-		url, err := util.GetURL()
+		endpoints, err := util.GetEndpoints()
 		if err != nil {
 			return err
 		}
 
-		body := fmt.Sprintf(`{
-			"key":"%s",
-			"config":"%s"
-			}`, config.Name, string(data))
-
-		req, err := http.NewRequest("POST", url+applyPath, bytes.NewBuffer([]byte(body)))
+		client, err := clientv3.New(clientv3.Config{
+			Endpoints:   endpoints,
+			DialTimeout: 5 * time.Second,
+		})
 		if err != nil {
 			return err
 		}
-		client := &http.Client{}
-		_, err = client.Do(req)
+
+		defer client.Close()
+
+		prefix, err := util.GetConfigPrefix()
 		if err != nil {
+			return err
+		}
+
+		if _, err := client.Put(context.TODO(), prefix+config.Name, string(data)); err != nil {
 			return err
 		}
 

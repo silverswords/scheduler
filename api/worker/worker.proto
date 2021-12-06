@@ -4,7 +4,7 @@ package scheduler.tasks;
 
 import weak "gogoproto/gogo.proto";
 import "api/utils/empty.proto";
-
+import "api/tasks/tasks.proto";
 option go_package = "github.com/silverswords/scheduler/api/worker";
 
 service Worker {
@@ -13,7 +13,7 @@ service Worker {
 }
 
 message DeliverRequest {
-    string name = 1 [(gogoproto.nullable) = false];
+    scheduler.tasks.TaskInfo task = 1 [(gogoproto.nullable) = false];
 }
 
 message CancelRequest {

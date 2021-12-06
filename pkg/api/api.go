@@ -3,14 +3,12 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/silverswords/scheduler/pkg/config"
-	"github.com/silverswords/scheduler/pkg/task"
 	"github.com/silverswords/scheduler/pkg/util"
 )
 
@@ -125,22 +123,6 @@ func (c *Client) ListWorkers(ctx context.Context) error {
 
 	for k, v := range resp.Kvs {
 		fmt.Println(k, v)
-	}
-
-	return nil
-}
-
-func (c *Client) DeliverTask(ctx context.Context, worker string, task *task.RemoteTask) error {
-	value, err := task.Encode()
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	key := c.taskPrefix + worker + "/" + task.Name + time.Now().Format(time.RFC3339)
-	if _, err := c.etcdClient.Put(ctx, key, string(value)); err != nil {
-		log.Println("deliver task fail:", err)
-		return err
 	}
 
 	return nil

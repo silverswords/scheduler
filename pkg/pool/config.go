@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
+	taskspb "github.com/silverswords/scheduler/api/tasks"
 	"github.com/silverswords/scheduler/pkg/config"
-	"github.com/silverswords/scheduler/pkg/task"
 )
 
 const nameSeparator = "-"
@@ -85,7 +85,7 @@ type step struct {
 	retryTimes        int
 }
 
-func (s *step) newTask() (task.Task, error) {
+func (s *step) newTask() (*taskspb.TaskInfo, error) {
 	if s.state != stepPendding && s.state != stepFailed {
 		return nil, buildStateError(s.state, stepPendding, stepFailed)
 	}
@@ -95,8 +95,10 @@ func (s *step) newTask() (task.Task, error) {
 		go stepStateChangeHook(s)
 	}
 
-	return &task.RemoteTask{
-		Name: strings.Join([]string{strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
+	return &taskspb.TaskInfo{
+		Name:   strings.Join([]string{strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
+		Cmd:    s.Run,
+		Lables: s.Lables,
 	}, nil
 }
 
@@ -210,6 +212,8 @@ func (s configState) String() string {
 }
 
 type runningConfig struct {
+	*config.Config
+
 	lock         sync.Mutex
 	name         string
 	tasks        map[string]*step
@@ -221,15 +225,15 @@ type runningConfig struct {
 
 func fromConfig(c *config.Config) *runningConfig {
 	config := &runningConfig{
+		Config:    c,
 		name:      c.Name,
 		tasks:     make(map[string]*step),
 		StartTime: time.Now(),
 		state:     configPendding,
 	}
 
-	tasks := make(map[string]*step)
 	for _, s := range c.Jobs.Steps {
-		tasks[s.Name] = &step{
+		config.tasks[s.Name] = &step{
 			Step:  s,
 			c:     config,
 			state: stepPendding,
@@ -245,8 +249,8 @@ func fromConfig(c *config.Config) *runningConfig {
 	return config
 }
 
-func (c *runningConfig) Graph() ([]task.Task, error) {
-	avaliableTask := []task.Task{}
+func (c *runningConfig) Graph() ([]*taskspb.TaskInfo, error) {
+	avaliableTask := []*taskspb.TaskInfo{}
 
 	for _, s := range c.tasks {
 		if len(s.Depends) == 0 {
@@ -254,7 +258,9 @@ func (c *runningConfig) Graph() ([]task.Task, error) {
 			if err != nil {
 				return nil, err
 			}
+
 			avaliableTask = append(avaliableTask, t)
+			continue
 		}
 
 		for _, depend := range s.Depends {
@@ -278,7 +284,7 @@ func (c *runningConfig) Graph() ([]task.Task, error) {
 	return avaliableTask, nil
 }
 
-func (c *runningConfig) Complete(complete string) ([]task.Task, error) {
+func (c *runningConfig) Complete(complete string) ([]*taskspb.TaskInfo, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	completeTask := c.tasks[complete]
@@ -304,7 +310,7 @@ func (c *runningConfig) Complete(complete string) ([]task.Task, error) {
 	return c.newTask(avaliableTask)
 }
 
-func (c *runningConfig) newTask(avaliableTask []string) (result []task.Task, err error) {
+func (c *runningConfig) newTask(avaliableTask []string) (result []*taskspb.TaskInfo, err error) {
 	for _, taskName := range avaliableTask {
 		t, err := c.tasks[taskName].newTask()
 		if err != nil {
@@ -316,7 +322,7 @@ func (c *runningConfig) newTask(avaliableTask []string) (result []task.Task, err
 	return
 }
 
-func (c *runningConfig) Fail(fail string) (task.Task, error) {
+func (c *runningConfig) Fail(fail string) (*taskspb.TaskInfo, error) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	failTask := c.tasks[fail]

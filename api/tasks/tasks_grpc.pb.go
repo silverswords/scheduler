@@ -15,158 +15,158 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
-// TasksClient is the client API for Tasks service.
+// StateChangeClient is the client API for StateChange service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type TasksClient interface {
+type StateChangeClient interface {
 	Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*utils.Empty, error)
 	Fail(ctx context.Context, in *FailRequest, opts ...grpc.CallOption) (*utils.Empty, error)
 	Complete(ctx context.Context, in *CompleteRequest, opts ...grpc.CallOption) (*utils.Empty, error)
 }
 
-type tasksClient struct {
+type stateChangeClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewTasksClient(cc grpc.ClientConnInterface) TasksClient {
-	return &tasksClient{cc}
+func NewStateChangeClient(cc grpc.ClientConnInterface) StateChangeClient {
+	return &stateChangeClient{cc}
 }
 
-func (c *tasksClient) Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*utils.Empty, error) {
+func (c *stateChangeClient) Start(ctx context.Context, in *StartRequest, opts ...grpc.CallOption) (*utils.Empty, error) {
 	out := new(utils.Empty)
-	err := c.cc.Invoke(ctx, "/scheduler.tasks.Tasks/Start", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/scheduler.tasks.StateChange/Start", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *tasksClient) Fail(ctx context.Context, in *FailRequest, opts ...grpc.CallOption) (*utils.Empty, error) {
+func (c *stateChangeClient) Fail(ctx context.Context, in *FailRequest, opts ...grpc.CallOption) (*utils.Empty, error) {
 	out := new(utils.Empty)
-	err := c.cc.Invoke(ctx, "/scheduler.tasks.Tasks/Fail", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/scheduler.tasks.StateChange/Fail", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *tasksClient) Complete(ctx context.Context, in *CompleteRequest, opts ...grpc.CallOption) (*utils.Empty, error) {
+func (c *stateChangeClient) Complete(ctx context.Context, in *CompleteRequest, opts ...grpc.CallOption) (*utils.Empty, error) {
 	out := new(utils.Empty)
-	err := c.cc.Invoke(ctx, "/scheduler.tasks.Tasks/Complete", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/scheduler.tasks.StateChange/Complete", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// TasksServer is the server API for Tasks service.
-// All implementations must embed UnimplementedTasksServer
+// StateChangeServer is the server API for StateChange service.
+// All implementations must embed UnimplementedStateChangeServer
 // for forward compatibility
-type TasksServer interface {
+type StateChangeServer interface {
 	Start(context.Context, *StartRequest) (*utils.Empty, error)
 	Fail(context.Context, *FailRequest) (*utils.Empty, error)
 	Complete(context.Context, *CompleteRequest) (*utils.Empty, error)
-	mustEmbedUnimplementedTasksServer()
+	mustEmbedUnimplementedStateChangeServer()
 }
 
-// UnimplementedTasksServer must be embedded to have forward compatible implementations.
-type UnimplementedTasksServer struct {
+// UnimplementedStateChangeServer must be embedded to have forward compatible implementations.
+type UnimplementedStateChangeServer struct {
 }
 
-func (UnimplementedTasksServer) Start(context.Context, *StartRequest) (*utils.Empty, error) {
+func (UnimplementedStateChangeServer) Start(context.Context, *StartRequest) (*utils.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Start not implemented")
 }
-func (UnimplementedTasksServer) Fail(context.Context, *FailRequest) (*utils.Empty, error) {
+func (UnimplementedStateChangeServer) Fail(context.Context, *FailRequest) (*utils.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Fail not implemented")
 }
-func (UnimplementedTasksServer) Complete(context.Context, *CompleteRequest) (*utils.Empty, error) {
+func (UnimplementedStateChangeServer) Complete(context.Context, *CompleteRequest) (*utils.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Complete not implemented")
 }
-func (UnimplementedTasksServer) mustEmbedUnimplementedTasksServer() {}
+func (UnimplementedStateChangeServer) mustEmbedUnimplementedStateChangeServer() {}
 
-// UnsafeTasksServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to TasksServer will
+// UnsafeStateChangeServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to StateChangeServer will
 // result in compilation errors.
-type UnsafeTasksServer interface {
-	mustEmbedUnimplementedTasksServer()
+type UnsafeStateChangeServer interface {
+	mustEmbedUnimplementedStateChangeServer()
 }
 
-func RegisterTasksServer(s grpc.ServiceRegistrar, srv TasksServer) {
-	s.RegisterService(&Tasks_ServiceDesc, srv)
+func RegisterStateChangeServer(s grpc.ServiceRegistrar, srv StateChangeServer) {
+	s.RegisterService(&StateChange_ServiceDesc, srv)
 }
 
-func _Tasks_Start_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _StateChange_Start_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TasksServer).Start(ctx, in)
+		return srv.(StateChangeServer).Start(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/scheduler.tasks.Tasks/Start",
+		FullMethod: "/scheduler.tasks.StateChange/Start",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TasksServer).Start(ctx, req.(*StartRequest))
+		return srv.(StateChangeServer).Start(ctx, req.(*StartRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Tasks_Fail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _StateChange_Fail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FailRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TasksServer).Fail(ctx, in)
+		return srv.(StateChangeServer).Fail(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/scheduler.tasks.Tasks/Fail",
+		FullMethod: "/scheduler.tasks.StateChange/Fail",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TasksServer).Fail(ctx, req.(*FailRequest))
+		return srv.(StateChangeServer).Fail(ctx, req.(*FailRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Tasks_Complete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _StateChange_Complete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CompleteRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TasksServer).Complete(ctx, in)
+		return srv.(StateChangeServer).Complete(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/scheduler.tasks.Tasks/Complete",
+		FullMethod: "/scheduler.tasks.StateChange/Complete",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TasksServer).Complete(ctx, req.(*CompleteRequest))
+		return srv.(StateChangeServer).Complete(ctx, req.(*CompleteRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Tasks_ServiceDesc is the grpc.ServiceDesc for Tasks service.
+// StateChange_ServiceDesc is the grpc.ServiceDesc for StateChange service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Tasks_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "scheduler.tasks.Tasks",
-	HandlerType: (*TasksServer)(nil),
+var StateChange_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "scheduler.tasks.StateChange",
+	HandlerType: (*StateChangeServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Start",
-			Handler:    _Tasks_Start_Handler,
+			Handler:    _StateChange_Start_Handler,
 		},
 		{
 			MethodName: "Fail",
-			Handler:    _Tasks_Fail_Handler,
+			Handler:    _StateChange_Fail_Handler,
 		},
 		{
 			MethodName: "Complete",
-			Handler:    _Tasks_Complete_Handler,
+			Handler:    _StateChange_Complete_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

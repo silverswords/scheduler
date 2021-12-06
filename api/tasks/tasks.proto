@@ -8,7 +8,7 @@ import "api/utils/timestamp.proto";
 
 option go_package = "github.com/silverswords/scheduler/api/tasks";
 
-service Tasks {
+service StateChange {
     rpc Start(StartRequest) returns (scheduler.utils.Empty);
     rpc Fail(FailRequest) returns (scheduler.utils.Empty);
     rpc Complete(CompleteRequest) returns (scheduler.utils.Empty);
@@ -34,4 +34,13 @@ message CompleteRequest {
     scheduler.utils.Timestamp config_start_time = 2 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
     string step_name = 3 [(gogoproto.nullable) = false];
     scheduler.utils.Timestamp completed_at = 4 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
+}
+
+message TaskInfo {
+    string name = 1 [(gogoproto.nullable) = false];
+    string cmd = 2 [(gogoproto.nullable) = false];
+    int64 priority = 3;
+    repeated string lables = 4;
+    map<string, string> envs = 5;
+    scheduler.utils.Timestamp start_at = 6 [(gogoproto.stdtime) = true, (gogoproto.nullable) = false];
 }

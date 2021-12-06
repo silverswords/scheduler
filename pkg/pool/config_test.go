@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	taskspb "github.com/silverswords/scheduler/api/tasks"
 	"github.com/silverswords/scheduler/pkg/config"
-	"github.com/silverswords/scheduler/pkg/task"
 )
 
 const testWorkerName = "test"
@@ -21,7 +21,7 @@ func initStepConfigPtr(steps map[string]*step, c *runningConfig) {
 	}
 }
 
-func RemoteTaskEqual(tasks1, tasks2 []task.Task) bool {
+func TaskInfoSliceEqual(tasks1, tasks2 []*taskspb.TaskInfo) bool {
 	if len(tasks1) != len(tasks2) {
 		return false
 	}
@@ -52,7 +52,7 @@ func TestRunningConfigGraph(t *testing.T) {
 	tests := []struct {
 		name    string
 		fields  fields
-		want    []task.Task
+		want    []*taskspb.TaskInfo
 		wantErr bool
 	}{
 		{
@@ -74,8 +74,8 @@ func TestRunningConfigGraph(t *testing.T) {
 				},
 				StartTime: time.Time{},
 			},
-			want: []task.Task{
-				&task.RemoteTask{
+			want: []*taskspb.TaskInfo{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "basic" + nameSeparator + "step1",
 				},
 			},
@@ -116,11 +116,11 @@ func TestRunningConfigGraph(t *testing.T) {
 				},
 				StartTime: time.Time{},
 			},
-			want: []task.Task{
-				&task.RemoteTask{
+			want: []*taskspb.TaskInfo{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step1-1",
 				},
-				&task.RemoteTask{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step1-2",
 				},
 			},
@@ -141,7 +141,7 @@ func TestRunningConfigGraph(t *testing.T) {
 				t.Errorf("name %s, runningConfig.Graph() error = %v, wantErr %v", tt.name, err, tt.wantErr)
 				return
 			}
-			if !RemoteTaskEqual(got, tt.want) {
+			if !TaskInfoSliceEqual(got, tt.want) {
 				t.Errorf("name %s, runningConfig.Graph() = %v, want %v", tt.name, got, tt.want)
 			}
 		})
@@ -164,7 +164,7 @@ func TestRunningConfigComplete(t *testing.T) {
 		fields  fields
 		args    args
 		prepare func(c *runningConfig)
-		want    []task.Task
+		want    []*taskspb.TaskInfo
 		wantErr bool
 	}{
 		{
@@ -191,8 +191,8 @@ func TestRunningConfigComplete(t *testing.T) {
 				c.Graph()
 				c.tasks["step1"].start("testWorkerName")
 			},
-			want: []task.Task{
-				&task.RemoteTask{
+			want: []*taskspb.TaskInfo{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "basic" + nameSeparator + "step2",
 				},
 			},
@@ -294,8 +294,8 @@ func TestRunningConfigComplete(t *testing.T) {
 				c.tasks["step1-1"].start("testWorkerName")
 			},
 			args: args{complete: "step1-1"},
-			want: []task.Task{
-				&task.RemoteTask{
+			want: []*taskspb.TaskInfo{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-1",
 				},
 			},
@@ -343,11 +343,11 @@ func TestRunningConfigComplete(t *testing.T) {
 				c.Complete("step1-1")
 			},
 			args: args{complete: "step1-2"},
-			want: []task.Task{
-				&task.RemoteTask{
+			want: []*taskspb.TaskInfo{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-2",
 				},
-				&task.RemoteTask{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-3",
 				},
 			},
@@ -393,8 +393,8 @@ func TestRunningConfigComplete(t *testing.T) {
 				c.tasks["step1-2"].start(testWorkerName)
 			},
 			args: args{complete: "step1-2"},
-			want: []task.Task{
-				&task.RemoteTask{
+			want: []*taskspb.TaskInfo{
+				{
 					Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "parallel" + nameSeparator + "step2-3",
 				},
 			},
@@ -417,7 +417,7 @@ func TestRunningConfigComplete(t *testing.T) {
 				return
 			}
 
-			if !RemoteTaskEqual(got, tt.want) {
+			if !TaskInfoSliceEqual(got, tt.want) {
 				t.Errorf("name %s, runningConfig.Complete() = %v, want %v", tt.name, got, tt.want)
 			}
 		})
@@ -433,7 +433,7 @@ func TestRunningConfigFail(t *testing.T) {
 		c       *runningConfig
 		args    args
 		prepare func(c *runningConfig)
-		want    task.Task
+		want    *taskspb.TaskInfo
 		wantErr bool
 	}{
 		{
@@ -490,7 +490,7 @@ func TestRunningConfigFailRetry(t *testing.T) {
 		c       *runningConfig
 		args    args
 		prepare func(c *runningConfig)
-		want    task.Task
+		want    *taskspb.TaskInfo
 		wantErr bool
 	}{
 		{
@@ -518,7 +518,7 @@ func TestRunningConfigFailRetry(t *testing.T) {
 				c.Graph()
 				c.tasks["step1"].start("testWorkerName")
 			},
-			want: &task.RemoteTask{
+			want: &taskspb.TaskInfo{
 				Name: strconv.FormatInt(time.Time{}.UnixMicro(), 10) + nameSeparator + "basic" + nameSeparator + "step1",
 			},
 			wantErr: false,

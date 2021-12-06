@@ -4,37 +4,37 @@ import (
 	"container/heap"
 	"sync"
 
-	"github.com/silverswords/scheduler/pkg/task"
+	taskspb "github.com/silverswords/scheduler/api/tasks"
 )
 
 // Queue is for storing tasks, supports sorting of tasks, and determines the order of execution of tasks
 type Queue interface {
-	Add(t task.Task)
-	Get() task.Task
-	Done(t task.Task)
+	Add(t *taskspb.TaskInfo)
+	Get() *taskspb.TaskInfo
+	Done(t *taskspb.TaskInfo)
 	SetCompareFunc(CompareFunc)
 	IsEmpty() bool
 }
 
 // chanQueue is the implementation of Queue use channel
-type chanQueue chan task.Task
+type chanQueue chan *taskspb.TaskInfo
 
 func NewChanQueue(qsize int) Queue {
-	return chanQueue(make(chan task.Task, qsize))
+	return chanQueue(make(chan *taskspb.TaskInfo, qsize))
 }
 
-// Add add a new task.Task to Queue
-func (q chanQueue) Add(t task.Task) {
+// Add add a new *taskspb.TaskInfo to Queue
+func (q chanQueue) Add(t *taskspb.TaskInfo) {
 	q <- t
 }
 
 // Get return a task
-func (q chanQueue) Get() task.Task {
+func (q chanQueue) Get() *taskspb.TaskInfo {
 	return <-q
 }
 
-// Done means that the task.Task has finished
-func (q chanQueue) Done(t task.Task) {}
+// Done means that the *taskspb.TaskInfo has finished
+func (q chanQueue) Done(t *taskspb.TaskInfo) {}
 
 // IsEmpty tells the user whether the queue is empty
 func (q chanQueue) IsEmpty() bool { return false }
@@ -44,7 +44,7 @@ func (q chanQueue) SetCompareFunc(CompareFunc) {}
 
 // Type is the real implementation for Queue, it supports sorting and avoid reentrant
 type Type struct {
-	queue []task.Task
+	queue []*taskspb.TaskInfo
 
 	running     set
 	dirty       set
@@ -53,12 +53,12 @@ type Type struct {
 }
 
 // CompareFunc is the type for function used for sorting
-type CompareFunc func(t1, t2 task.Task) bool
+type CompareFunc func(t1, t2 *taskspb.TaskInfo) bool
 
 // NewQueue returns a new Queue
 func NewQueue() Queue {
 	q := &Type{
-		queue:   []task.Task{},
+		queue:   []*taskspb.TaskInfo{},
 		running: set{},
 		dirty:   set{},
 		cond:    sync.NewCond(&sync.Mutex{}),
@@ -67,8 +67,8 @@ func NewQueue() Queue {
 	return q
 }
 
-// Add add a new task.Task to Queue
-func (q *Type) Add(t task.Task) {
+// Add add a new *taskspb.TaskInfo to Queue
+func (q *Type) Add(t *taskspb.TaskInfo) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 
@@ -91,18 +91,18 @@ func (q *Type) Add(t task.Task) {
 }
 
 // Get return a task
-func (q *Type) Get() task.Task {
+func (q *Type) Get() *taskspb.TaskInfo {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 	for len(q.queue) == 0 {
 		q.cond.Wait()
 	}
 
-	var t task.Task
+	var t *taskspb.TaskInfo
 	if q.compareFunc == nil {
 		t, q.queue = q.queue[0], q.queue[1:]
 	} else {
-		t = heap.Pop(q).(task.Task)
+		t = heap.Pop(q).(*taskspb.TaskInfo)
 	}
 
 	q.running.insert(t)
@@ -111,8 +111,8 @@ func (q *Type) Get() task.Task {
 	return t
 }
 
-// Done means that the task.Task has finished
-func (q *Type) Done(t task.Task) {
+// Done means that the *taskspb.TaskInfo has finished
+func (q *Type) Done(t *taskspb.TaskInfo) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 
@@ -189,7 +189,7 @@ func (q *Type) Swap(i, j int) {
 func (q *Type) Push(x interface{}) {
 	// Push and Pop use pointer receivers because they modify the slice's length,
 	// not just its contents.
-	q.queue = append(q.queue, x.(task.Task))
+	q.queue = append(q.queue, x.(*taskspb.TaskInfo))
 }
 
 // Pop remove the last element in q.queue
