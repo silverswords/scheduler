@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"sync/atomic"
 
 	taskspb "github.com/silverswords/scheduler/api/tasks"
 )
@@ -33,9 +34,15 @@ func (t taskFunc) Do(ctx context.Context) error {
 	return t(ctx)
 }
 
+var _ CanclableTask = &commandTask{}
+
 type commandTask struct {
 	info *taskspb.TaskInfo
 	cmd  *exec.Cmd
+
+	canceled int32
+
+	testCh chan<- struct{}
 }
 
 func NewCommandTask(info *taskspb.TaskInfo) Task {
@@ -45,8 +52,8 @@ func NewCommandTask(info *taskspb.TaskInfo) Task {
 	}
 
 	return &commandTask{
-		info,
-		cmd,
+		info: info,
+		cmd:  cmd,
 	}
 }
 
@@ -57,15 +64,30 @@ func (t *commandTask) Do(ctx context.Context) error {
 	default:
 	}
 
-	output, err := t.cmd.Output()
-	if err != nil {
-		return fmt.Errorf("new task failed: %v", err)
+	if atomic.LoadInt32(&t.canceled) != 0 {
+		return errors.New("task has be cancled")
 	}
 
-	log.Print(string(output))
+	if err := t.cmd.Start(); err != nil {
+		log.Fatal(err)
+	}
+
+	if t.testCh != nil {
+		t.testCh <- struct{}{}
+	}
+
+	if err := t.cmd.Wait(); err != nil {
+		log.Fatal(err)
+	}
+
 	return nil
 }
 
 func (t *commandTask) Cancle() error {
-	return t.cmd.Process.Kill()
+	atomic.AddInt32(&t.canceled, 1)
+	if t.cmd.Process != nil {
+		return t.cmd.Process.Kill()
+	}
+
+	return nil
 }

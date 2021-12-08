@@ -87,9 +87,11 @@ func TestCancelTask(t *testing.T) {
 				w.DeliverTask(context.TODO(), &workerpb.DeliverRequest{
 					Task: &taskspb.TaskInfo{
 						Name: "basic",
-						Cmd:  "timeout 5",
+						Cmd:  "sleep",
+						Args: []string{"5"},
 					},
 				})
+
 			},
 		},
 	}

@@ -32,31 +32,16 @@ var startCmd = &cobra.Command{
 			return err
 		}
 
-		configPrefix, err := util.GetConfigPrefix()
+		client, err := api.NewClient(endpoints)
 		if err != nil {
 			return err
 		}
 
-		workerPrefix, err := util.GetWorkerDiscoverPrefix()
-		if err != nil {
-			return err
-		}
-
-		taskPrefix, err := util.GetTaskDispatchPrefix()
-		if err != nil {
-			return err
-		}
-
-		client, err := api.NewClient(endpoints, configPrefix, taskPrefix, workerPrefix)
-		if err != nil {
-			return err
-		}
-
-		configDiscover := discover.NewManger(configPrefix, func(value []byte) (interface{}, error) {
+		configDiscover := discover.NewManger(client.ConfigPrefix(), func(value []byte) (interface{}, error) {
 			return config.Unmarshal(value)
 		})
 
-		workerDiscover := discover.NewManger(workerPrefix, func(value []byte) (interface{}, error) {
+		workerDiscover := discover.NewManger(client.WorkerPrefix(), func(value []byte) (interface{}, error) {
 			config, err := worker.Unmarshal(value)
 			if err != nil {
 				return nil, err

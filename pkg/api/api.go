@@ -12,6 +12,12 @@ import (
 	"github.com/silverswords/scheduler/pkg/util"
 )
 
+const (
+	defaultConfigPrefix = "config"
+	defaultWorkerPrefix = "worker"
+	defaultTaskPrefix   = "task"
+)
+
 type Client struct {
 	endpoints    []string
 	configPrefix string
@@ -20,27 +26,91 @@ type Client struct {
 	etcdClient   *clientv3.Client
 }
 
-func NewClient(endpoints []string, configPrefix, taskPrefix, workerPrefix string) (*Client, error) {
+type Option func(*Client) error
+
+func WithConfigPrefix(configPrefix string) Option {
+	return Option(func(c *Client) error {
+		c.configPrefix = configPrefix
+		return nil
+	})
+}
+
+func WithWorkerPrefix(workerPrefix string) Option {
+	return Option(func(c *Client) error {
+		c.workerPrefix = workerPrefix
+		return nil
+	})
+}
+
+func WithTaskPrefix(taskPrefix string) Option {
+	return Option(func(c *Client) error {
+		c.taskPrefix = taskPrefix
+		return nil
+	})
+}
+
+func WithEtcdClient(client *clientv3.Client) Option {
+	return Option(func(c *Client) error {
+		c.etcdClient = client
+		return nil
+	})
+}
+
+func NewClient(endpoints []string, ops ...Option) (*Client, error) {
 	etcdClient, err := clientv3.New(clientv3.Config{
 		Endpoints:   endpoints,
 		DialTimeout: 5 * time.Second,
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{
+	configPrefix, err := util.GetConfigPrefix()
+	if err != nil {
+		configPrefix = defaultConfigPrefix
+	}
+
+	workerPrefix, err := util.GetWorkerDiscoverPrefix()
+	if err != nil {
+		workerPrefix = defaultWorkerPrefix
+	}
+
+	taskPrefix, err := util.GetTaskDispatchPrefix()
+	if err != nil {
+		taskPrefix = defaultTaskPrefix
+	}
+
+	c := &Client{
 		endpoints,
 		configPrefix,
 		taskPrefix,
 		workerPrefix,
 		etcdClient,
-	}, nil
+	}
+
+	for _, option := range ops {
+		if err := option(c); err != nil {
+			return nil, err
+		}
+	}
+
+	return c, nil
 }
 
 func (c *Client) GetOriginClient() *clientv3.Client {
 	return c.etcdClient
+}
+
+func (c *Client) ConfigPrefix() string {
+	return c.configPrefix
+}
+
+func (c *Client) WorkerPrefix() string {
+	return c.workerPrefix
+}
+
+func (c *Client) TaskPrefix() string {
+	return c.taskPrefix
 }
 
 func (c *Client) ApplyConfig(ctx context.Context, filePath string) error {
