@@ -34,6 +34,7 @@ func New(config *Config) (*Worker, error) {
 	return &Worker{
 		name:      config.Name,
 		configStr: string(configBytes),
+		running:   make(map[string]task.Task),
 
 		c: config,
 	}, nil

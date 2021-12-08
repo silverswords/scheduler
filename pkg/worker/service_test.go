@@ -10,25 +10,26 @@ import (
 	taskspb "github.com/silverswords/scheduler/api/tasks"
 	utilspb "github.com/silverswords/scheduler/api/utils"
 	workerpb "github.com/silverswords/scheduler/api/worker"
+	"github.com/silverswords/scheduler/pkg/task"
 	"google.golang.org/grpc"
 )
 
 func TestService(t *testing.T) {
 	go func() {
-		l, err := net.Listen("tcp", ":8080")
+		l, err := net.Listen("tcp", ":8081")
 		if err != nil {
 			log.Fatalf("failed to listen: %v", err)
 		}
 
 		grpcServer := grpc.NewServer()
 
-		workerpb.RegisterWorkerServer(grpcServer, &Worker{})
+		workerpb.RegisterWorkerServer(grpcServer, &Worker{running: make(map[string]task.Task)})
 		if err := grpcServer.Serve(l); err != nil {
 			log.Fatalf("failed to serve: %v", err)
 		}
 	}()
 
-	conn, err := grpc.Dial(":8080", grpc.WithInsecure())
+	conn, err := grpc.Dial(":8081", grpc.WithInsecure())
 
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)

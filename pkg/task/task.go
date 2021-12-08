@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os/exec"
 	"sync/atomic"
 
@@ -46,14 +45,16 @@ type commandTask struct {
 }
 
 func NewCommandTask(info *taskspb.TaskInfo) Task {
-	cmd := exec.Command(info.Cmd, info.Args...)
+	cmd := exec.Command("bash", "-c", info.Cmd)
+
 	for k, v := range info.Envs {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", k, v))
 	}
-
+	fmt.Print(cmd.Env)
 	return &commandTask{
-		info: info,
-		cmd:  cmd,
+		info:     info,
+		cmd:      cmd,
+		canceled: 0,
 	}
 }
 
@@ -69,7 +70,7 @@ func (t *commandTask) Do(ctx context.Context) error {
 	}
 
 	if err := t.cmd.Start(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if t.testCh != nil {
@@ -77,7 +78,7 @@ func (t *commandTask) Do(ctx context.Context) error {
 	}
 
 	if err := t.cmd.Wait(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	return nil
