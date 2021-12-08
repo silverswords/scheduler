@@ -2,14 +2,17 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"os"
+	"path"
+	"strconv"
+	"strings"
 	"time"
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/silverswords/scheduler/pkg/config"
 	"github.com/silverswords/scheduler/pkg/util"
+	"github.com/silverswords/scheduler/pkg/worker"
 )
 
 const (
@@ -17,6 +20,8 @@ const (
 	defaultWorkerPrefix = "worker"
 	defaultTaskPrefix   = "task"
 )
+
+const defaultSep = "/"
 
 type Client struct {
 	endpoints    []string
@@ -102,15 +107,15 @@ func (c *Client) GetOriginClient() *clientv3.Client {
 }
 
 func (c *Client) ConfigPrefix() string {
-	return c.configPrefix
+	return c.configPrefix + defaultSep
 }
 
 func (c *Client) WorkerPrefix() string {
-	return c.workerPrefix
+	return c.workerPrefix + defaultSep
 }
 
 func (c *Client) TaskPrefix() string {
-	return c.taskPrefix
+	return c.taskPrefix + defaultSep
 }
 
 func (c *Client) ApplyConfig(ctx context.Context, filePath string) error {
@@ -124,12 +129,7 @@ func (c *Client) ApplyConfig(ctx context.Context, filePath string) error {
 		return err
 	}
 
-	prefix, err := util.GetConfigPrefix()
-	if err != nil {
-		return err
-	}
-
-	if _, err := c.etcdClient.Put(ctx, prefix+config.Name, string(data)); err != nil {
+	if _, err := c.etcdClient.Put(ctx, path.Join(c.configPrefix, config.Name), string(data)); err != nil {
 		return err
 	}
 
@@ -147,55 +147,115 @@ func (c *Client) RemoveConfig(ctx context.Context, filePath string) error {
 		return err
 	}
 
-	prefix, err := util.GetConfigPrefix()
-	if err != nil {
-		return err
-	}
-
-	if _, err := c.etcdClient.Delete(ctx, prefix+config.Name); err != nil {
+	if err := c.RemoveConfigWithName(ctx, config.Name); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (c *Client) ListAllConfig(ctx context.Context) error {
-	resp, err := c.etcdClient.Get(ctx, c.configPrefix, clientv3.WithPrefix())
-	if err != nil {
+func (c *Client) RemoveConfigWithName(ctx context.Context, name string) error {
+	if _, err := c.etcdClient.Delete(ctx, path.Join(c.configPrefix, name)); err != nil {
 		return err
-	}
-
-	for k, v := range resp.Kvs {
-		fmt.Println(k, v)
 	}
 
 	return nil
 }
 
-func (c *Client) ListTasks(ctx context.Context) error {
-	resp, err := c.etcdClient.Get(ctx, c.taskPrefix, clientv3.WithPrefix())
+func (c *Client) ListAllConfig(ctx context.Context) ([]*config.Config, error) {
+	resp, err := c.etcdClient.Get(ctx, c.ConfigPrefix(), clientv3.WithPrefix())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	for k, v := range resp.Kvs {
-		fmt.Println(k, v)
+	result := []*config.Config{}
+	for _, kv := range resp.Kvs {
+		c, err := config.Unmarshal(kv.Value)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, c)
 	}
 
-	return nil
+	return result, nil
 }
 
-func (c *Client) ListWorkers(ctx context.Context) error {
-	resp, err := c.etcdClient.Get(ctx, c.workerPrefix, clientv3.WithPrefix())
+type TaskState struct {
+	Name      string
+	StartTime time.Time
+	Steps     []*StepState
+	State     string
+}
+
+type StepState struct {
+	Name  string
+	State string
+}
+
+func (c *Client) ListTasks(ctx context.Context) ([]*TaskState, error) {
+	resp, err := c.etcdClient.Get(ctx, c.TaskPrefix(), clientv3.WithPrefix())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	for k, v := range resp.Kvs {
-		fmt.Println(k, v)
+	tasks := make(map[string]map[string]string)
+	steps := make(map[string]map[string][]*StepState)
+	for _, kv := range resp.Kvs {
+		slices := strings.Split(string(kv.Key), defaultSep)
+		if len(slices) == 4 {
+			if _, ok := steps[slices[1]]; !ok {
+				steps[slices[1]] = make(map[string][]*StepState)
+			}
+
+			steps[slices[1]][slices[2]] = append(steps[slices[1]][slices[2]], &StepState{
+				Name:  slices[3],
+				State: string(kv.Value),
+			})
+		} else if len(slices) == 3 {
+			if _, ok := tasks[slices[1]]; !ok {
+				tasks[slices[1]] = make(map[string]string)
+			}
+
+			tasks[slices[1]][slices[2]] = string(kv.Value)
+		}
 	}
 
-	return nil
+	result := []*TaskState{}
+	for name, temp := range tasks {
+		for t, state := range temp {
+			timestamp, err := strconv.ParseInt(t, 10, 64)
+			if err != nil {
+				return nil, err
+			}
+
+			result = append(result, &TaskState{
+				Name:      name,
+				StartTime: time.UnixMicro(timestamp),
+				Steps:     steps[name][t],
+				State:     state,
+			})
+		}
+	}
+
+	return result, nil
+}
+
+func (c *Client) ListWorkers(ctx context.Context) ([]*worker.Config, error) {
+	resp, err := c.etcdClient.Get(ctx, c.WorkerPrefix(), clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+
+	result := []*worker.Config{}
+	for _, kv := range resp.Kvs {
+		w, err := worker.Unmarshal(kv.Value)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, w)
+	}
+
+	return result, nil
 }
 
 func (c *Client) Watch(ctx context.Context, key string) clientv3.WatchChan {

@@ -54,6 +54,7 @@ func New() *Pool {
 	return &Pool{
 		scheduleSet:   schedule.NewHeapSet(),
 		queue:         queue,
+		configs:       make(map[string]*config.Config),
 		stop:          make(chan struct{}),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
@@ -68,16 +69,16 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, wo
 	go p.dispatcher(client)
 	etcdClient := client.GetOriginClient()
 	SetStepStateChangeHook(func(s *step) {
-		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), "running", s.c.name,
-			s.c.StartTime.Format(time.RFC1123), s.Name+"-"+strconv.Itoa(s.retryTimes)), s.state.String())
+		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), s.c.name,
+			strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.Name+"-"+strconv.Itoa(s.retryTimes)), s.state.String())
 		if err != nil {
 			log.Println(err)
 		}
 	})
 
 	SetConfigStateChangeHook(func(c *runningConfig) {
-		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), "running", c.name,
-			c.StartTime.Format(time.RFC1123)), c.state.String())
+		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), c.name,
+			strconv.FormatInt(c.StartTime.UnixMicro(), 10)), c.state.String())
 		if err != nil {
 			log.Println(err)
 		}

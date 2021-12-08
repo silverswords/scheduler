@@ -77,8 +77,9 @@ func (m *Manager) Run(ctx context.Context, client *clientv3.Client) error {
 
 			m.mtx.Lock()
 			for _, event := range response.Events {
+				remainKey := strings.TrimPrefix(string(event.Kv.Key), m.watchKey)
 				if event.Type == mvccpb.DELETE {
-					delete(m.targets, strings.TrimPrefix(string(event.Kv.Key), m.watchKey))
+					delete(m.targets, remainKey)
 					continue
 				}
 				t, err := m.f(event.Kv.Value)
@@ -86,7 +87,8 @@ func (m *Manager) Run(ctx context.Context, client *clientv3.Client) error {
 					log.Printf("can't unmarshal: %s", err)
 					continue
 				}
-				m.targets[strings.TrimPrefix(string(event.Kv.Key), m.watchKey)] = t
+
+				m.targets[remainKey] = t
 			}
 			m.mtx.Unlock()
 

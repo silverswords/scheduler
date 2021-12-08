@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"path"
 	"time"
 
 	workerpb "github.com/silverswords/scheduler/api/worker"
@@ -54,7 +55,7 @@ func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
 		return err
 	}
 
-	_, err = client.Put(ctx, workerPrefix+w.name, w.configStr, clientv3.WithLease(leaseResponse.ID))
+	_, err = client.Put(ctx, path.Join(workerPrefix, w.name), w.configStr, clientv3.WithLease(leaseResponse.ID))
 	if err != nil {
 		return err
 	}

@@ -4,3 +4,5 @@ lables:
   - go
   - nodejs
   - linux
+
+scheduler_addr: 127.0.0.1:8080

@@ -60,17 +60,17 @@ const (
 func (s stepState) String() string {
 	switch s {
 	case stepPendding:
-		return "stepPendding"
+		return "Pendding"
 	case stepReady:
-		return "stepReady"
+		return "Ready"
 	case stepRunning:
-		return "stepRunning"
+		return "Running"
 	case stepFailed:
-		return "stepFailed"
+		return "Failed"
 	case stepCompleted:
-		return "stepCompleted"
+		return "Completed"
 	default:
-		return "wrong state"
+		return "Wrong state"
 	}
 }
 

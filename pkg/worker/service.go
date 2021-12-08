@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"time"
 
 	utilspb "github.com/silverswords/scheduler/api/utils"
 	workerpb "github.com/silverswords/scheduler/api/worker"
@@ -18,9 +19,10 @@ func (w *Worker) DeliverTask(ctx context.Context, req *workerpb.DeliverRequest) 
 
 	go func() {
 		log.Printf("task[%s] run start\n", req.Task.Name)
-		if err := t.Do(ctx); err != nil {
-			log.Println(err)
-		}
+		time.Sleep(5 * time.Second)
+		// if err := t.Do(ctx); err != nil {
+		// 	log.Println(err)
+		// }
 
 		delete(w.running, req.Task.Name)
 		log.Printf("task[%s] run finished\n", req.Task.Name)
