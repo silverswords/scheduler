@@ -13,21 +13,29 @@ import (
 
 func (w *Worker) DeliverTask(ctx context.Context, req *workerpb.DeliverRequest) (*utilspb.Empty, error) {
 	fmt.Printf("receive task: %v\n", req.Task)
+	t := task.NewCommandTask(req.Task)
+	w.running[req.Task.Name] = t
+
 	go func() {
-		t := task.NewCommandTask(req.Task)
-		w.running[req.Task.Name] = t
 		log.Printf("task[%s] run start\n", req.Task.Name)
 		if err := t.Do(ctx); err != nil {
 			log.Println(err)
 		}
 
 		delete(w.running, req.Task.Name)
-		fmt.Printf("task[%s] run finished\n", req.Task.Name)
+		log.Printf("task[%s] run finished\n", req.Task.Name)
 	}()
+
 	return &utilspb.Empty{}, nil
 }
 
-func (w *Worker) CancelTask(ctx context.Context, req *workerpb.CancelRequest) (*utilspb.Empty, error) {
+func (w *Worker) CancelTask(ctx context.Context, req *workerpb.CancelRequest) (resp *utilspb.Empty, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("cancel task error: %v", r)
+		}
+	}()
+
 	fmt.Printf("receive cancel task: %v\n", req.Name)
 	t, ok := w.running[req.Name].(task.CanclableTask)
 	if !ok {

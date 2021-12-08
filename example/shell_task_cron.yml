@@ -11,4 +11,4 @@ jobs:
     SCHEDULETYPE: cron
   steps:
     - name: run
-      run: echo task:$TASKTYPE, schedule:$SCHEDULETYPE
+      run: echo task:$TASKTYPE

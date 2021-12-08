@@ -44,8 +44,7 @@ func TestDeliverTask(t *testing.T) {
 				req: &workerpb.DeliverRequest{
 					Task: &taskspb.TaskInfo{
 						Name: "hello world",
-						Cmd:  "echo",
-						Args: []string{"hello world"},
+						Cmd:  "echo hello world",
 					},
 				},
 			},
@@ -87,9 +86,10 @@ func TestCancelTask(t *testing.T) {
 				w.DeliverTask(context.TODO(), &workerpb.DeliverRequest{
 					Task: &taskspb.TaskInfo{
 						Name: "basic",
-						Cmd:  "timeout 5",
+						Cmd:  "sleep 5",
 					},
 				})
+
 			},
 		},
 	}

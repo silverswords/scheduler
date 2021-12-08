@@ -68,7 +68,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, wo
 	go p.dispatcher(client)
 	etcdClient := client.GetOriginClient()
 	SetStepStateChangeHook(func(s *step) {
-		_, err := etcdClient.Put(context.TODO(), path.Join("global", "running", s.c.name,
+		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), "running", s.c.name,
 			s.c.StartTime.Format(time.RFC1123), s.Name+"-"+strconv.Itoa(s.retryTimes)), s.state.String())
 		if err != nil {
 			log.Println(err)
@@ -76,7 +76,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, wo
 	})
 
 	SetConfigStateChangeHook(func(c *runningConfig) {
-		_, err := etcdClient.Put(context.TODO(), path.Join("global", "running", c.name,
+		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), "running", c.name,
 			c.StartTime.Format(time.RFC1123)), c.state.String())
 		if err != nil {
 			log.Println(err)
