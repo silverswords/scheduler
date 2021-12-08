@@ -10,6 +10,7 @@ import (
 	taskspb "github.com/silverswords/scheduler/api/tasks"
 	"github.com/silverswords/scheduler/api/utils"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 type mockService struct {
@@ -17,12 +18,8 @@ type mockService struct {
 }
 
 func TestSerive(t *testing.T) {
+	l := bufconn.Listen(1024 * 1024)
 	go func() {
-		l, err := net.Listen("tcp", ":8080")
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-
 		grpcServer := grpc.NewServer()
 
 		taskspb.RegisterStateChangeServer(grpcServer, &mockService{})
@@ -32,10 +29,11 @@ func TestSerive(t *testing.T) {
 		}
 	}()
 
-	conn, err := grpc.Dial(":8080", grpc.WithInsecure())
-
+	conn, err := grpc.Dial("bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+		return l.Dial()
+	}), grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		t.Fatalf("did not connect: %v", err)
 	}
 
 	defer conn.Close()

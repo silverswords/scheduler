@@ -12,15 +12,12 @@ import (
 	workerpb "github.com/silverswords/scheduler/api/worker"
 	"github.com/silverswords/scheduler/pkg/task"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
 )
 
 func TestService(t *testing.T) {
+	l := bufconn.Listen(1024 * 1024)
 	go func() {
-		l, err := net.Listen("tcp", ":8081")
-		if err != nil {
-			log.Fatalf("failed to listen: %v", err)
-		}
-
 		grpcServer := grpc.NewServer()
 
 		workerpb.RegisterWorkerServer(grpcServer, &Worker{running: make(map[string]task.Task)})
@@ -29,10 +26,11 @@ func TestService(t *testing.T) {
 		}
 	}()
 
-	conn, err := grpc.Dial(":8081", grpc.WithInsecure())
-
+	conn, err := grpc.Dial("bufnet", grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+		return l.Dial()
+	}), grpc.WithInsecure())
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		t.Fatalf("did not connect: %v", err)
 	}
 
 	defer conn.Close()
