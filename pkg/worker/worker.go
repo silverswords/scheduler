@@ -7,9 +7,11 @@ import (
 	"path"
 	"time"
 
+	taskspb "github.com/silverswords/scheduler/api/tasks"
 	workerpb "github.com/silverswords/scheduler/api/worker"
 	"github.com/silverswords/scheduler/pkg/task"
 	"github.com/silverswords/scheduler/pkg/util"
+	"github.com/spf13/viper"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 )
@@ -22,6 +24,8 @@ type Worker struct {
 	c *Config
 
 	running map[string]task.Task
+
+	schedulerClient taskspb.StateChangeClient
 	workerpb.UnimplementedWorkerServer
 }
 
@@ -44,6 +48,14 @@ func New(config *Config) (*Worker, error) {
 // Run starts to run the worker, registers itself under `workers` of
 // etcd, and monitors the tasks under `worker/worker-name`
 func (w *Worker) Run(ctx context.Context, client *clientv3.Client) error {
+	addr := viper.Get("grpc.addr").(string)
+	conn, err := grpc.Dial(addr, grpc.WithInsecure())
+	if err != nil {
+		return err
+	}
+
+	w.schedulerClient = taskspb.NewStateChangeClient(conn)
+
 	lease := clientv3.NewLease(client)
 	leaseResponse, err := lease.Grant(ctx, 100)
 	if err != nil {

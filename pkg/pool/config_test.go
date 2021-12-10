@@ -130,7 +130,9 @@ func TestRunningConfigGraph(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &runningConfig{
-				name:      tt.fields.name,
+				Config: &config.Config{
+					Name: tt.name,
+				},
 				tasks:     tt.fields.tasks,
 				StartTime: tt.fields.StartTime,
 			}
@@ -404,7 +406,9 @@ func TestRunningConfigComplete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := &runningConfig{
-				name:      tt.fields.name,
+				Config: &config.Config{
+					Name: tt.name,
+				},
 				tasks:     tt.fields.tasks,
 				StartTime: tt.fields.StartTime,
 			}
@@ -439,7 +443,9 @@ func TestRunningConfigFail(t *testing.T) {
 		{
 			name: "basic step1",
 			c: &runningConfig{
-				name: "basic",
+				Config: &config.Config{
+					Name: "basic",
+				},
 				tasks: map[string]*step{
 					"step1": {
 						Step: &config.Step{
@@ -496,7 +502,9 @@ func TestRunningConfigFailRetry(t *testing.T) {
 		{
 			name: "basic step1",
 			c: &runningConfig{
-				name: "basic",
+				Config: &config.Config{
+					Name: "basic",
+				},
 				tasks: map[string]*step{
 					"step1": {
 						Step: &config.Step{

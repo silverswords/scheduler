@@ -33,7 +33,7 @@ type Pool struct {
 	configs    map[string]*config.Config
 
 	runningMu     sync.RWMutex
-	runningConfig configHeap
+	runningConfig *configHeap
 	triggerReload chan struct{}
 	syncCh        chan struct{}
 
@@ -56,6 +56,7 @@ func New() *Pool {
 		queue:         queue,
 		configs:       make(map[string]*config.Config),
 		stop:          make(chan struct{}),
+		runningConfig: new(configHeap),
 		triggerReload: make(chan struct{}, 1),
 		syncCh:        make(chan struct{}),
 		workers:       make(map[string]*innerWorker),
@@ -69,7 +70,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, wo
 	go p.dispatcher(client)
 	etcdClient := client.GetOriginClient()
 	SetStepStateChangeHook(func(s *step) {
-		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), s.c.name,
+		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), s.c.Config.Name,
 			strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.Name+"-"+strconv.Itoa(s.retryTimes)), s.state.String())
 		if err != nil {
 			log.Println(err)
@@ -77,7 +78,7 @@ func (p *Pool) Run(client *api.Client, configs <-chan map[string]interface{}, wo
 	})
 
 	SetConfigStateChangeHook(func(c *runningConfig) {
-		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), c.name,
+		_, err := etcdClient.Put(context.TODO(), path.Join(client.TaskPrefix(), c.Config.Name,
 			strconv.FormatInt(c.StartTime.UnixMicro(), 10)), c.state.String())
 		if err != nil {
 			log.Println(err)

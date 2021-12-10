@@ -10,7 +10,8 @@ option go_package = "github.com/silverswords/scheduler/api/tasks";
 
 message TaskInfo {
     string name = 1 [(gogoproto.nullable) = false];
-    string cmd = 2 [(gogoproto.nullable) = false];
+    string config_name = 2 [(gogoproto.nullable) = false];
+    string cmd = 3 [(gogoproto.nullable) = false];
     int64 priority = 4;
     repeated string lables = 5;
     map<string, string> envs = 6;

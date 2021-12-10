@@ -4,12 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	taskspb "github.com/silverswords/scheduler/api/tasks"
+	"github.com/silverswords/scheduler/api/utils"
 	"github.com/silverswords/scheduler/pkg/config"
 )
 
@@ -96,9 +95,12 @@ func (s *step) newTask() (*taskspb.TaskInfo, error) {
 	}
 
 	return &taskspb.TaskInfo{
-		Name:   strings.Join([]string{strconv.FormatInt(s.c.StartTime.UnixMicro(), 10), s.c.name, s.Name}, nameSeparator),
-		Cmd:    s.Run,
-		Lables: s.Lables,
+		Name:       s.Name,
+		ConfigName: s.c.Name,
+		Cmd:        s.Run,
+		Lables:     s.Lables,
+		Priority:   int64(s.c.Config.Schedule.Priority),
+		StartAt:    utils.FromTime(s.c.StartTime),
 	}, nil
 }
 
@@ -143,48 +145,57 @@ func (s *step) fail() error {
 
 type configHeap []*runningConfig
 
-func (h configHeap) Len() int { return len(h) }
-func (h configHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
+func (h *configHeap) Len() int { return len(*h) }
+func (h *configHeap) Swap(i, j int) {
+	(*h)[i], (*h)[j] = (*h)[j], (*h)[i]
 }
 
-func (h configHeap) Less(i, j int) bool {
-	if h[i].StartTime.IsZero() {
+func (h *configHeap) Less(i, j int) bool {
+	if (*h)[i].StartTime.IsZero() {
 		return false
 	}
-	if h[j].StartTime.IsZero() {
+	if (*h)[j].StartTime.IsZero() {
 		return true
 	}
-	return h[i].StartTime.Before(h[j].StartTime)
+	return (*h)[i].StartTime.Before((*h)[j].StartTime)
 }
 
-func (h configHeap) First() *runningConfig {
-	return h[0]
+func (h *configHeap) First() *runningConfig {
+	return (*h)[0]
 }
 
-func (h configHeap) Push(config interface{}) {
-	h = append(h, config.(*runningConfig))
+func (h *configHeap) Push(config interface{}) {
+	fmt.Println(123)
+	*h = append(*h, config.(*runningConfig))
 }
 
-func (h configHeap) Pop() (result interface{}) {
-	result, h = h[len(h)-1], h[:len(h)-1]
+func (h *configHeap) Pop() (result interface{}) {
+	result, *h = (*h)[len(*h)-1], (*h)[:len(*h)-1]
 	return
 }
 
-func (h configHeap) Search(t time.Time, name string) *runningConfig {
-	i := sort.Search(len(h), func(i int) bool {
-		return h[i].StartTime.Equal(t) && h[i].name == name
+func (h *configHeap) Search(t time.Time, name string) *runningConfig {
+	fmt.Println(t, name)
+	h.Print()
+	i := sort.Search(len(*h), func(i int) bool {
+		return (*h)[i].StartTime.Equal(t) && (*h)[i].Config.Name == name
 	})
 
-	return h[i]
+	return (*h)[i]
 }
 
-func (h configHeap) Remove(c *runningConfig) {
-	i := sort.Search(len(h), func(i int) bool {
-		return h[i].StartTime.Equal(c.StartTime) && h[i].name == c.name
+func (h *configHeap) Remove(c *runningConfig) {
+	i := sort.Search(len(*h), func(i int) bool {
+		return (*h)[i].StartTime.Equal(c.StartTime) && (*h)[i].Config.Name == c.Config.Name
 	})
 
-	h = append(h[0:i], h[i+1:]...)
+	*h = append((*h)[0:i], (*h)[i+1:]...)
+}
+
+func (h *configHeap) Print() {
+	for _, config := range *h {
+		fmt.Println(config)
+	}
 }
 
 type configState int
@@ -215,7 +226,6 @@ type runningConfig struct {
 	*config.Config
 
 	lock         sync.Mutex
-	name         string
 	tasks        map[string]*step
 	StartTime    time.Time
 	completedNum int
@@ -226,7 +236,6 @@ type runningConfig struct {
 func fromConfig(c *config.Config) *runningConfig {
 	config := &runningConfig{
 		Config:    c,
-		name:      c.Name,
 		tasks:     make(map[string]*step),
 		StartTime: time.Now(),
 		state:     configPendding,

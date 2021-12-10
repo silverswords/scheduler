@@ -10,6 +10,7 @@ import (
 func (p *Pool) Start(ctx context.Context, req *taskspb.StartRequest) (*utilspb.Empty, error) {
 	p.runningMu.Lock()
 	defer p.runningMu.Unlock()
+
 	config := p.runningConfig.Search(req.ConfigStartTime.ToTime(), req.ConfigName)
 	if err := config.tasks[req.StepName].start(req.WorkerName); err != nil {
 		return nil, err
