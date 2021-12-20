@@ -28,7 +28,9 @@ func (p *Pool) Fail(ctx context.Context, req *taskspb.FailRequest) (*utilspb.Emp
 		return nil, err
 	}
 
-	p.queue.Add(task)
+	if task != nil {
+		p.queue.Add(task)
+	}
 
 	return &utilspb.Empty{}, nil
 }

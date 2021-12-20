@@ -31,7 +31,7 @@ func (w *Worker) DeliverTask(ctx context.Context, req *workerpb.DeliverRequest) 
 	go func() {
 		log.Printf("task[%s] run start\n", req.Task.Name)
 		time.Sleep(5 * time.Second)
-		if err := t.Do(ctx); err != nil {
+		if err := t.Do(context.Background()); err != nil {
 			if _, err := w.schedulerClient.Fail(context.Background(), &taskspb.FailRequest{
 				ConfigName:      req.Task.ConfigName,
 				ConfigStartTime: req.Task.StartAt,
